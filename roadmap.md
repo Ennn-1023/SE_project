@@ -53,7 +53,7 @@ stateDiagram-v2
 ### F0. 專案基礎建設與 UI 風格系統 — P0
 
 - 前後端專案骨架、lint／測試框架、CI 執行測試指令。
-- 環境變數載入與啟動檢查（缺少必要變數時明確報錯並停止），提供 `.env.example`。
+- 環境變數載入與啟動檢查（缺少必要變數時明確報錯並停止），提供 `.env.template`。
 - 統一錯誤回應格式（例如 `{ error: { field, message, hint } }`）。
 - **設計系統**：米白色系底色（例：`#FAF7F0`／`#F5F0E6`）、撞色按鈕（例：深藍 `#1F3A93`、珊瑚橘 `#FF6B4A`），以 CSS 變數／design tokens 統一定義。
 - **RWD**：mobile-first 版面、斷點（手機 < 640px、平板 640–1024px、桌機 > 1024px），按鈕觸控區 ≥ 44px。
@@ -210,7 +210,7 @@ flowchart LR
 | `GOOGLE_SERVICE_ACCOUNT_KEY` 或 `GOOGLE_CLIENT_ID`／`GOOGLE_CLIENT_SECRET` | Google Sheets API 認證 | F3 |
 | `APP_BASE_URL` | OAuth 回呼與 CORS 設定 | F1、F3 |
 
-實際值只放 `.env`（列入 `.gitignore`），repo 只提供 `.env.example`。
+實際值只放 `.env`（列入 `.gitignore`），repo 只提供不含實際值的 `.env.template`。
 
 ---
 
