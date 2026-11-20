@@ -27,6 +27,12 @@ coverage/
 .pytest_cache/
 .nyc_output/
 
+# SQLite 資料庫檔
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # Log
 *.log
 logs/
