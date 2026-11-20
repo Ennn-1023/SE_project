@@ -3,7 +3,7 @@
 **Feature**: [../spec.md](../spec.md) | **Data model**: [../data-model.md](../data-model.md)
 
 - Base path：`/api`；request／response 皆為 `application/json`（UTF-8）。
-- 所有 `POST` 請求必須帶 `Content-Type: application/json`，否則 415（與 `SameSite=Strict` cookie 一起構成 CSRF 防護）。
+- **有內容**的 `POST` 請求（`Content-Length` > 0 或使用 chunked 傳輸）必須帶 `Content-Type: application/json`，否則 415（與 `SameSite=Strict` cookie 一起構成 CSRF 防護）。**沒有內容**的 `POST`（`/api/auth/logout`、`/api/students/:studentId/reset-password`）不檢查 `Content-Type`。前端一律帶 `Content-Type: application/json`。
 - 登入狀態以 HttpOnly cookie `sid` 傳遞（簽章、`SameSite=Strict`、`Path=/`；正式環境加 `Secure`）。前端不讀取它。
 
 ## 統一錯誤格式
@@ -33,7 +33,7 @@
 | 401 | `INVALID_CREDENTIALS` | 帳號不存在**或**密碼錯誤（訊息一律「學號或密碼錯誤」） |
 | 401 | `UNAUTHENTICATED` | 未登入（無 cookie 或 cookie 無效） |
 | 401 | `SESSION_EXPIRED` | 閒置 2 小時或登入滿 12 小時（訊息「登入已逾時，請重新登入」） |
-| 401 | `WRONG_CURRENT_PASSWORD` | 改密碼時目前密碼錯誤 |
+| 401 | `WRONG_CURRENT_PASSWORD` | 改密碼時目前密碼錯誤（登入狀態仍有效，前端不得因此登出） |
 | 403 | `FORBIDDEN` | 已登入但角色不符（訊息「權限不足」） |
 | 404 | `STUDENT_NOT_FOUND` | 學生帳號不存在（訊息「找不到此學生帳號」） |
 | 409 | `ACCOUNT_EXISTS` | 新增時帳號名稱已存在（訊息「學號 411000001 已存在」） |
@@ -153,4 +153,4 @@ Request：`{ "studentId": string, "name": string, "group"?: string }`
 | `/student` | 學生（搶答頁；本功能先顯示等待畫面與「建議修改密碼」提示） | 導向 `/login` | 導向 `/teacher` |
 | `/account/password` | 老師與學生 | 導向 `/login` | — |
 
-任何 API 回 401 時，前端清除目前使用者並導向 `/login`；`SESSION_EXPIRED` 時在登入頁顯示「登入已逾時，請重新登入」。
+前端只在 API 回 401 且 `code` 為 `UNAUTHENTICATED` 或 `SESSION_EXPIRED` 時，清除目前使用者並導向 `/login`；`SESSION_EXPIRED` 時在登入頁顯示「登入已逾時，請重新登入」。`INVALID_CREDENTIALS`（登入失敗）與 `WRONG_CURRENT_PASSWORD`（改密碼時目前密碼錯誤）雖然也是 401，但**不代表登入狀態失效**，前端 MUST 留在原頁面顯示錯誤訊息，不得登出或跳頁。

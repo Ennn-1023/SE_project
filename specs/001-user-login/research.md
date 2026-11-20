@@ -8,7 +8,7 @@
 
 ## R1. 後端執行環境與 HTTP 框架
 
-- **Decision**: Node.js 22 LTS + TypeScript 5（`strict: true`）+ Express 5。
+- **Decision**: Node.js 26 LTS + TypeScript 5（`strict: true`）+ Express 5。
 - **Rationale**: Express 是課程與教學資源最多的 Node 框架，組員上手成本最低；Express 5 原生支援 async handler 的錯誤傳遞，可集中到單一錯誤處理中介層輸出統一錯誤格式（憲章原則 II）。後續 F6 即時同步可在同一個 HTTP server 上掛 Socket.IO／WebSocket。
 - **Alternatives considered**: Fastify（效能較好、內建 JSON schema 驗證，但驗證規則要與前端共用時不如 zod 方便）；NestJS（結構完整但對本專案規模過重）。
 
@@ -20,9 +20,9 @@
 
 ## R3. 資料庫與存取層
 
-- **Decision**: SQLite（透過 Prisma ORM），連線字串由環境變數 `DATABASE_URL` 提供（例如 `file:./dev.db`）；測試使用獨立的暫存 SQLite 檔，每個測試檔重建 schema。
-- **Rationale**: 課堂規模（約 50 人）SQLite 綽綽有餘；免安裝資料庫伺服器，組員在 Windows／macOS 都能直接執行；Prisma 提供型別安全的查詢與 migration，且日後要換成 PostgreSQL 只需改 provider 與 `DATABASE_URL`。唯一性（帳號名稱）由資料庫 UNIQUE 約束保證，可正確處理「老師連按兩次新增」的競態。
-- **Alternatives considered**: PostgreSQL（較適合正式部署，但每位組員都要裝 DB 或 Docker）；記憶體儲存（重啟即遺失帳號，不符需求）。
+- **Decision**（實作時修訂）: SQLite，使用 Node 26 內建的 `node:sqlite`（`DatabaseSync`），資料表以手寫 SQL migration 建立（`PRAGMA user_version` 記錄版本），連線字串由環境變數 `DATABASE_URL` 提供（例如 `file:./dev.db`）；測試使用獨立的暫存 SQLite 檔，每個測試檔重建 schema。
+- **Rationale**: 課堂規模（約 50 人）SQLite 綽綽有餘；免安裝資料庫伺服器，組員在 Windows／macOS 都能直接執行；內建模組免安裝、免原生編譯（Prisma 7 需搭配需原生編譯的 SQLite driver adapter，在未安裝建置工具的 Windows 上容易失敗）；SQL 集中在 repository 函式中，日後換 PostgreSQL 只需改寫這一層。唯一性（帳號名稱）由資料庫 UNIQUE 約束保證，可正確處理「老師連按兩次新增」的競態。
+- **Alternatives considered**: Prisma ORM（原計畫，因上述原生編譯問題改用內建模組）；PostgreSQL（較適合正式部署，但每位組員都要裝 DB 或 Docker）；記憶體儲存（重啟即遺失帳號，不符需求）。
 
 ## R4. 密碼雜湊
 

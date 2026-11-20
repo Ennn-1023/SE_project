@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/*
+ * 設計系統 tokens（roadmap F0）：米白色系底色、撞色按鈕。
+ * 所有頁面只使用這裡定義的顏色，不直接寫色碼。
+ */
+@theme {
+  --color-paper: #faf7f0; /* 主要底色 */
+  --color-paper-deep: #f5f0e6; /* 卡片、區塊底色 */
+  --color-line: #e4dccb; /* 邊框 */
+  --color-ink: #2b2a27; /* 主要文字 */
+  --color-ink-soft: #6b665c; /* 次要文字 */
+  --color-primary: #1f3a93; /* 撞色：深藍（主要按鈕） */
+  --color-primary-strong: #162a6b;
+  --color-accent: #ff6b4a; /* 撞色：珊瑚橘（危險／強調按鈕） */
+  --color-accent-strong: #e5522f;
+  --color-danger: #b42318; /* 錯誤訊息文字 */
+  --color-danger-soft: #fdecea;
+  --color-success: #1e7a46;
+  --color-success-soft: #e6f4ec;
+
+  /* 斷點：手機 < 640px、平板 640–1024px、桌機 > 1024px */
+  --breakpoint-sm: 640px;
+  --breakpoint-lg: 1024px;
+}
+
+html,
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family:
+    system-ui,
+    -apple-system,
+    "Noto Sans TC",
+    "Microsoft JhengHei",
+    sans-serif;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+}

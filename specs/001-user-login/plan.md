@@ -8,19 +8,19 @@
 
 實作課程搶答系統的登入與權限控管：老師由系統初始化建立；老師逐一新增、檢視、刪除學生帳號並可重設學生密碼；學生以 9 位數字學號＋統一預設密碼登入（不強制改密碼、不限制失敗次數）；登入後依資料庫記錄的身分類別導向老師頁或學生頁，所有老師功能由後端檢查角色。
 
-技術做法：npm workspaces 單一 repo，`backend`（Node.js + TypeScript + Express 5 + Prisma/SQLite）、`frontend`（React + Vite + Tailwind CSS）、`shared`（前後端共用的 zod 驗證 schema 與錯誤 code）。伺服器端 session（HttpOnly 簽章 cookie，DB 只存 token 雜湊）以便登出／改密碼／重設／刪除時立即失效；密碼以 Node 內建 scrypt 雜湊。全部測試使用 Vitest。詳見 [research.md](research.md)。
+技術做法：npm workspaces 單一 repo，`backend`（Node.js + TypeScript + Express 5 + SQLite（Node 內建 `node:sqlite`））、`frontend`（React + Vite + Tailwind CSS）、`shared`（前後端共用的 zod 驗證 schema 與錯誤 code）。伺服器端 session（HttpOnly 簽章 cookie，DB 只存 token 雜湊）以便登出／改密碼／重設／刪除時立即失效；密碼以 Node 內建 scrypt 雜湊。全部測試使用 Vitest。詳見 [research.md](research.md)。
 
 ## Technical Context
 
-**Language/Version**: TypeScript 5（`strict`），Node.js 22 LTS（後端）；瀏覽器端由 Vite 編譯
+**Language/Version**: TypeScript 5（`strict`），Node.js 26 LTS（後端）；瀏覽器端由 Vite 編譯
 
-**Primary Dependencies**: 後端 Express 5、Prisma（SQLite）、zod、cookie-parser、pino；前端 React 19、Vite、Tailwind CSS v4、React Router；共用 zod
+**Primary Dependencies**: 後端 Express 5、Node 內建 `node:sqlite`、zod、cookie-parser、pino；前端 React 19、Vite、Tailwind CSS v4、React Router；共用 zod
 
-**Storage**: SQLite（Prisma ORM），連線由 `DATABASE_URL` 提供；日後可換 PostgreSQL
+**Storage**: SQLite（Node 內建 `node:sqlite`，migration 寫在 `backend/src/db/migrations.ts`），連線由 `DATABASE_URL` 提供；日後可換 PostgreSQL
 
 **Testing**: Vitest（後端 + supertest 整合測試；前端 + jsdom + React Testing Library）
 
-**Target Platform**: Node.js 22 伺服器；手機／平板／電腦的現代瀏覽器（RWD）
+**Target Platform**: Node.js 26 伺服器；手機／平板／電腦的現代瀏覽器（RWD）
 
 **Project Type**: Web application（frontend + backend + shared）
 
@@ -80,8 +80,8 @@ shared/
 
 backend/
 ├── package.json
-├── prisma/
-│   └── schema.prisma        # User, Session, SecurityEvent
+├── src/db/
+│   └── migrations.ts        # users, sessions, security_events 資料表（PRAGMA user_version 管理版本）
 ├── src/
 │   ├── config/env.ts        # 環境變數驗證（缺少即停止）
 │   ├── lib/password.ts      # scrypt 雜湊與比對

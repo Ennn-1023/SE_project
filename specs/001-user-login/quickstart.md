@@ -6,7 +6,7 @@
 
 ## 前置需求
 
-- Node.js 22 LTS（`node -v` 顯示 `v22.x`）、npm 10 以上
+- Node.js 26 LTS（`node -v` 顯示 `v26.x`）、npm 10 以上
 - 不需要另外安裝資料庫（使用 SQLite 檔案）
 
 ## 設定

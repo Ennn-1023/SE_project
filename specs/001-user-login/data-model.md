@@ -2,7 +2,7 @@
 
 **Feature**: [spec.md](spec.md) | **Research**: [research.md](research.md)
 
-儲存：SQLite（Prisma）。時間一律存 UTC。
+儲存：SQLite（Node 內建 `node:sqlite`）。資料表名稱為 `users`、`sessions`、`security_events`，欄位為下表名稱的 snake_case。時間一律存 UTC。
 
 ---
 
@@ -10,7 +10,7 @@
 
 | 欄位 | 型別 | 必填 | 規則 / 說明 |
 |------|------|------|-------------|
-| `id` | string (cuid) | 是 | 主鍵 |
+| `id` | string (UUID) | 是 | 主鍵 |
 | `username` | string | 是 | **UNIQUE**。學生＝9 位半形數字學號（`^[0-9]{9}$`，保留開頭 0）；老師＝`TEACHER_USERNAME`（1–20 字元、無空白、不可為 9 位數字） |
 | `displayName` | string | 是 | 去除前後空白後 1–50 字元；老師預設為「老師」 |
 | `role` | enum `TEACHER` \| `STUDENT` | 是 | 建立時設定，之後不可變更；**所有導向與權限判斷只依此欄位**（FR-012） |
@@ -42,7 +42,7 @@
 
 | 欄位 | 型別 | 必填 | 規則 / 說明 |
 |------|------|------|-------------|
-| `id` | string (cuid) | 是 | 主鍵 |
+| `id` | string (UUID) | 是 | 主鍵 |
 | `tokenHash` | string | 是 | **UNIQUE**。cookie 中隨機 token 的 SHA-256；不存原始 token |
 | `userId` | string | 是 | FK → `User.id`，**ON DELETE CASCADE** |
 | `createdAt` | datetime | 是 | 登入時間 |
@@ -65,7 +65,7 @@
 
 | 欄位 | 型別 | 必填 | 規則 / 說明 |
 |------|------|------|-------------|
-| `id` | string (cuid) | 是 | 主鍵 |
+| `id` | string (UUID) | 是 | 主鍵 |
 | `type` | enum | 是 | `LOGIN_SUCCESS`、`LOGIN_FAILURE`、`LOGOUT`、`PASSWORD_CHANGED`、`PASSWORD_RESET`、`STUDENT_CREATED`、`STUDENT_DELETED` |
 | `actorUsername` | string \| null | 否 | 執行者（登入失敗時為**嘗試的帳號名稱**，截斷至 20 字元） |
 | `targetUsername` | string \| null | 否 | 被操作的學生學號（新增／刪除／重設時） |
