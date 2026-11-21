@@ -1,0 +1,105 @@
+@startuml 001-component
+title F0/F1/F2 組件圖：基礎建設、登入權限與組別管理
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+
+actor "老師" as Teacher
+actor "學生" as Student
+
+package "前端（瀏覽器，RWD）" as FE {
+  [UI 風格系統\n(米白色系 / 撞色按鈕 tokens)] as Theme
+  [登入頁\nLoginPage] as LoginPage
+  [老師管理頁\nTeacherDashboard] as TeacherPage
+  [建立學生帳號\nStudentCreatePanel] as CreatePanel
+  [組別管理\nGroupManagePanel] as GroupManage
+  [學生首頁\nStudentHome] as StudentHome
+  [修改密碼\nChangePasswordForm] as ChangePwd
+  [API 用戶端\nApiClient] as ApiClient
+  [錯誤訊息元件\nErrorMessage] as ErrorView
+}
+
+package "後端（伺服器）" as BE {
+  package "路由層" {
+    [AuthRoutes\n/auth] as AuthRoutes
+    [StudentRoutes\n/students] as StudentRoutes
+    [GroupRoutes\n/groups] as GroupRoutes
+  }
+  package "中介層" {
+    [RequireAuth\n(登入檢查)] as RequireAuth
+    [RequireRole\n(角色檢查)] as RequireRole
+    [Validate\n(輸入驗證)] as Validate
+    [ErrorHandler\n(一致錯誤格式)] as ErrorHandler
+  }
+  package "服務層" {
+    [AuthService] as AuthService
+    [SessionService] as SessionService
+    [AccountService\n(建立學生帳號/重設密碼)] as AccountService
+    [GroupService] as GroupService
+    [PasswordHasher] as Hasher
+  }
+  package "資料存取層" {
+    [UserRepository] as UserRepo
+    [SessionRepository] as SessionRepo
+    [GroupSettingsRepository] as GroupRepo
+  }
+  [Config\n(環境變數載入與啟動檢查)] as Config
+  [Logger\n(遮罩機敏欄位)] as Logger
+}
+
+database "資料庫" as DB
+file ".env\n(STUDENT_DEFAULT_PASSWORD,\nTEACHER_INITIAL_PASSWORD,\nSESSION_SECRET ...)" as EnvFile
+
+Teacher --> LoginPage
+Student --> LoginPage
+Teacher --> TeacherPage
+Student --> StudentHome
+
+TeacherPage --> CreatePanel
+TeacherPage --> GroupManage
+StudentHome --> ChangePwd
+
+LoginPage --> ApiClient
+CreatePanel --> ApiClient
+GroupManage --> ApiClient
+StudentHome --> ApiClient
+ChangePwd --> ApiClient
+ApiClient --> ErrorView
+FE ..> Theme : 所有頁面共用
+
+ApiClient --> AuthRoutes : HTTPS
+ApiClient --> StudentRoutes : HTTPS
+ApiClient --> GroupRoutes : HTTPS
+
+AuthRoutes --> Validate
+StudentRoutes --> RequireAuth
+GroupRoutes --> RequireAuth
+RequireAuth --> RequireRole
+RequireRole --> Validate
+
+AuthRoutes --> AuthService
+StudentRoutes --> AccountService
+GroupRoutes --> GroupService
+
+AuthService --> SessionService
+AuthService --> Hasher
+AuthService --> UserRepo
+AccountService --> Hasher
+AccountService --> UserRepo
+AccountService --> SessionService
+GroupService --> UserRepo
+GroupService --> GroupRepo
+SessionService --> SessionRepo
+RequireAuth --> SessionService
+
+UserRepo --> DB
+SessionRepo --> DB
+GroupRepo --> DB
+
+Config --> EnvFile
+AuthService ..> Config
+AccountService ..> Config
+SessionService ..> Config
+ErrorHandler ..> Logger
+@enduml

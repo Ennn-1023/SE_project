@@ -1,0 +1,157 @@
+@startuml 001-class
+title F0/F1/F2 類別圖：帳號、登入狀態與組別
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+hide empty members
+
+enum Role {
+  TEACHER
+  STUDENT
+}
+
+abstract class User {
+  +id: string
+  +account: string
+  +displayName: string
+  +role: Role
+  -passwordHash: string
+  +usingDefaultPassword: boolean
+  +failedLoginCount: int
+  +failedWindowStartedAt: DateTime?
+  +lockedUntil: DateTime?
+  +createdAt: DateTime
+  +isLocked(now: DateTime): boolean
+}
+
+class Teacher
+class Student {
+  +studentId: string
+  +groupNumber: int? <<null = 未分配>>
+  +isUnassigned(): boolean
+}
+
+class Session {
+  +id: string
+  +userId: string
+  +createdAt: DateTime
+  +lastActiveAt: DateTime
+  +revoked: boolean
+  +isExpired(now: DateTime, idleTimeout: Duration): boolean
+}
+
+class GroupSettings {
+  +groupCount: int <<0..50>>
+  +isValidGroup(n: int): boolean
+}
+
+class GroupSummary {
+  +groupNumber: int
+  +members: Student[]
+  +memberCount: int
+}
+
+class CreateStudentInput {
+  +studentId: string <<4-20 英數字>>
+  +name: string <<1-50 字元>>
+}
+
+class AppError {
+  +status: int
+  +code: string
+  +field: string?
+  +message: string
+  +hint: string?
+}
+
+class Config {
+  +studentDefaultPassword: string
+  +teacherAccount: string
+  +teacherInitialPassword: string
+  +sessionSecret: string
+  +sessionIdleTimeout: Duration
+  +databasePath: string
+  +port: int
+  {static} +load(env): Config
+}
+
+interface Clock {
+  +now(): DateTime
+}
+
+class AuthService {
+  +login(account: string, password: string): Session
+  +logout(sessionId: string): void
+  +changePassword(userId: string, current: string, next: string, confirm: string): void
+}
+
+class SessionService {
+  +create(userId: string): Session
+  +validate(sessionId: string): Session
+  +touch(sessionId: string): void
+  +revoke(sessionId: string): void
+  +revokeAllForUser(userId: string): void
+}
+
+class AccountService {
+  +createStudent(input: CreateStudentInput): Student
+  +listStudents(): Student[]
+  +resetPassword(studentId: string): void
+  +seedTeacher(): Teacher
+}
+
+class GroupService {
+  +getSettings(): GroupSettings
+  +setGroupCount(n: int): GroupSettings
+  +selfSelect(studentId: string, groupNumber: int): Student
+  +assign(studentId: string, groupNumber: int?): Student
+  +overview(): GroupSummary[]
+  +unassigned(): Student[]
+}
+
+interface PasswordHasher {
+  +hash(plain: string): string
+  +verify(plain: string, hash: string): boolean
+}
+
+interface UserRepository {
+  +findByAccount(account: string): User?
+  +findStudent(studentId: string): Student?
+  +createStudent(studentId: string, name: string, hash: string): Student <<學號重複時失敗>>
+  +updateGroupIfUnassigned(studentId: string, groupNumber: int): boolean
+  +updateGroup(studentId: string, groupNumber: int?): void
+  +updatePassword(userId: string, hash: string, isDefault: boolean): void
+  +recordLoginFailure(userId: string, now: DateTime): void
+  +resetLoginFailures(userId: string): void
+}
+
+interface SessionRepository
+interface GroupSettingsRepository
+
+User <|-- Teacher
+User <|-- Student
+User --> Role
+User "1" -- "0..*" Session : 擁有 >
+GroupSettings "1" ..> "0..*" GroupSummary : 定義可用組別 1..N >
+GroupSummary "1" o-- "0..*" Student : 成員 >
+
+AuthService --> UserRepository
+AuthService --> SessionService
+AuthService --> PasswordHasher
+AuthService ..> Config
+AuthService ..> AppError : throws
+SessionService --> SessionRepository
+SessionService ..> Config
+AuthService --> Clock
+SessionService --> Clock
+AccountService --> UserRepository
+AccountService --> SessionService
+AccountService --> PasswordHasher
+AccountService ..> Config
+AccountService ..> CreateStudentInput
+AccountService ..> AppError : throws
+GroupService --> UserRepository
+GroupService --> GroupSettingsRepository
+GroupService ..> GroupSummary
+GroupService ..> AppError : throws
+@enduml

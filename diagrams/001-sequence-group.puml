@@ -1,0 +1,69 @@
+@startuml 001-sequence-group
+title 時序圖：學生自選組別與老師調整組別
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+autonumber
+
+actor "學生" as S
+actor "老師" as T
+participant "StudentHome" as SH
+participant "GroupManagePanel" as GM
+participant "GroupRoutes" as R
+participant "RequireAuth /\nRequireRole" as G
+participant "GroupService" as GS
+participant "GroupSettingsRepository" as GR
+participant "UserRepository" as UR
+database "DB" as DB
+
+== 老師設定組數 ==
+T -> GM : 設定組數 N
+GM -> R : PUT /groups/settings {groupCount: N}
+R -> G : 老師角色檢查
+R -> GS : setGroupCount(N)
+GS -> GS : 驗證 0 ≤ N ≤ 50 且為整數
+GS -> UR : 查詢 groupNumber > N 的學生
+alt 被移除的組別仍有成員
+  GS --> R : AppError(409, "第 k 組仍有成員：...，請先移出")
+else 可調整
+  GS -> GR : 儲存 groupCount = N
+  GS --> R : GroupSettings
+end
+
+== 學生自選組別（僅限未分配） ==
+S -> SH : 開啟首頁
+SH -> R : GET /groups/me
+R -> GS : 取得學生組別與組數
+GS --> SH : groupNumber? 與 N
+alt N == 0
+  SH --> S : 顯示「老師尚未開放分組」
+else 已分組
+  SH --> S : 顯示「你在第 g 組」（無選組按鈕）
+else 未分配
+  S -> SH : 選擇第 g 組
+  SH -> R : POST /groups/me {groupNumber: g}
+  R -> G : 學生角色檢查
+  R -> GS : selfSelect(studentId, g)
+  GS -> GS : 驗證 1 ≤ g ≤ N
+  GS -> UR : updateGroupIfUnassigned(studentId, g)
+  UR -> DB : UPDATE ... SET group = g\nWHERE id = ? AND group IS NULL
+  alt 影響 0 筆（已被老師指派或已選過）
+    GS --> R : AppError(409, "你已分組，如需更換請洽老師", 目前組別)
+  else 成功
+    GS --> R : Student(groupNumber = g)
+    R --> SH : 200
+    SH --> S : 顯示「你在第 g 組」
+  end
+end
+
+== 老師調整學生組別 ==
+T -> GM : 將學生甲改到第 g 組 / 改回未分配
+GM -> R : PUT /groups/assignments/{studentId} {groupNumber: g | null}
+R -> G : 老師角色檢查
+R -> GS : assign(studentId, g)
+GS -> GS : 驗證 g 為 null 或 1 ≤ g ≤ N
+GS -> UR : updateGroup(studentId, g)
+UR -> DB : UPDATE
+GS --> R : Student
+R --> GM : 200 → 重新整理組別總覽
+@enduml
