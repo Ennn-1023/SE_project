@@ -1,17 +1,3 @@
-<!--
-Sync Impact Report
-- Version change: (template, unversioned) → 1.0.0
-- Modified principles (placeholder → new title):
-  - [PRINCIPLE_1_NAME] → I. 輸入驗證（不可妥協）
-  - [PRINCIPLE_2_NAME] → II. 清楚的錯誤訊息
-  - [PRINCIPLE_3_NAME] → III. 機敏資料只放環境變數（不可妥協）
-  - [PRINCIPLE_4_NAME] → IV. 正常案例與邊界案例測試（不可妥協）
-  - [PRINCIPLE_5_NAME] → V. 回報測試指令與結果
-- Added sections: 安全與資料處理要求; 開發流程與品質關卡; Governance 內容
-- Removed sections: 無
-- Follow-up TODOs: 無（RATIFICATION_DATE 以首次採用日 2026-11-19 填入）
--->
-
 # SE Project Constitution
 
 本文件為學生專題「SE Project」的開發憲章，規範所有功能的設計、實作、測試與交付方式。
@@ -69,6 +55,31 @@ Sync Impact Report
 
 **理由**：可重現的測試指令與真實結果，讓組員、助教與評審能獨立驗證成果。
 
+### VI. PlantUML 設計優先（Design-First with PlantUML）
+
+- **規格制定階段（speckit.specify）**：每個功能 MUST 以 PlantUML 語法產生以下三種圖表，
+  並將 `.puml` 檔儲存於 `./diagrams/` 目錄：
+  - 組件圖（Component diagram）；
+  - 類別圖（Class diagram）；
+  - 時序圖（Sequence diagram）。
+- **產物生成（Artifact Generation）**：`.puml` 檔建立或修改後，MUST 執行 PlantUML CLI
+  `java -jar plantuml.jar "./diagrams/*.puml"` 將所有 `.puml` 轉換為 PNG，
+  且 PNG MUST 輸出於與原始檔相同的 `./diagrams/` 目錄。`.puml` 與對應 PNG MUST 保持同步，
+  不得只更新其中之一。
+- **規劃階段（speckit.plan）**：plan MUST 以上述圖表作為主要藍圖，據以產生應用程式的
+  架構與組件；plan 中的模組、類別與互動流程 MUST 能對應到圖表中的元素。若規劃需偏離圖表，
+  MUST 先更新圖表（並重新產生 PNG），再更新 plan。
+- **實作階段（speckit.implement）**：程式碼產生完成後 MUST 執行驗證步驟，逐項確認最終程式碼
+  與圖表一致，至少包含：
+  - 組件圖中的每個組件在程式碼中皆有對應模組，且無圖表未記載的組件；
+  - 類別圖中的類別、主要屬性、方法與關聯在程式碼中皆有對應；
+  - 時序圖中的呼叫順序與參與者與實際程式流程相符。
+  驗證發現不一致時，MUST 修正程式碼或（經確認設計變更後）同步更新圖表，
+  並在完成回報中列出驗證結果。
+
+**理由**：先以圖表確立設計，可讓組員在寫程式前對架構取得共識；以圖表作為 plan 與實作的
+共同依據並在最後驗證一致性，可避免文件與程式碼脫節，也便於評審理解系統設計。
+
 ## 安全與資料處理要求
 
 - 相依套件 MUST 來自官方或可信任的套件來源，並鎖定版本（使用 lock 檔）。
@@ -78,14 +89,17 @@ Sync Impact Report
 
 ## 開發流程與品質關卡
 
-- 功能開發流程：規格（spec）→ 計畫（plan）→ 任務（tasks）→ 實作 → 測試 → 回報。
+- 功能開發流程：規格（spec，含 PlantUML 圖表與 PNG）→ 計畫（plan，以圖表為藍圖）→
+  任務（tasks）→ 實作 → 測試 → 圖表一致性驗證 → 回報。
 - 每個功能的規格與計畫 MUST 列出：輸入欄位及其驗證規則、錯誤情境與對應錯誤訊息、
   所需環境變數、正常案例與邊界案例測試清單。
 - 合併到 `main` 前的品質關卡（全部 MUST 通過）：
   1. 所有輸入皆有驗證，且錯誤訊息清楚（原則 I、II）；
   2. 無機敏資料出現在程式碼、設定檔或 log（原則 III）；
   3. 每個功能至少有正常案例與一個邊界案例測試，且全部通過（原則 IV）；
-  4. 已回報測試指令與實際結果（原則 V）。
+  4. 已回報測試指令與實際結果（原則 V）；
+  5. `./diagrams/` 內具備該功能的組件圖、類別圖、時序圖（`.puml` 與 PNG 同步），
+     且已完成程式碼與圖表的一致性驗證（原則 VI）。
 
 ## Governance
 
@@ -99,4 +113,4 @@ Sync Impact Report
 - 合規檢查：每次程式碼審查與功能驗收 MUST 依「開發流程與品質關卡」逐項檢查；
   任何例外 MUST 在對應的 plan 中記錄理由。
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-19 | **Last Amended**: 2026-11-19
+**Version**: 1.1.0 | **Ratified**: 2026-11-19 | **Last Amended**: 2026-11-22
