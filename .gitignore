@@ -17,6 +17,9 @@ service-account*.json
 *.sqlite
 *.sqlite3
 
+# 本機工具（PlantUML CLI，各自下載，不進版控）
+plantuml*.jar
+
 # 相依套件
 node_modules/
 .venv/
