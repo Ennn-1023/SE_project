@@ -1,0 +1,117 @@
+@startuml student-component
+title 學生端搶答系統 — Component Diagram (002-student-buzzer)
+skinparam defaultFontName "Microsoft JhengHei"
+skinparam backgroundColor #FAF7F0
+skinparam componentStyle rectangle
+skinparam component {
+  BackgroundColor #F5F0E6
+  BorderColor #1F3A93
+}
+skinparam package {
+  BorderColor #1F3A93
+}
+
+actor "學生\nStudent" as Student
+actor "開發/測試者\nDeveloper" as Dev
+
+package "frontend（React + Vite，RWD mobile-first）" {
+  [StudentPage\n依 phase 切換畫面] as Page
+  [WaitingView\n等待老師開放題目] as Waiting
+  [AnsweringView\n題號/題目/本組已送出] as Answering
+  [CountdownTimer\n剩餘時間] as Timer
+  [AnswerInput\n字數/一鍵送出/防連點] as Input
+  [ResultView\n依順位揭曉+本組成敗] as Result
+  [ActivityEndedView\n活動結束提示] as Ended
+  [ConnectionBanner\n斷線提示] as Banner
+  [useStudentState\n狀態合併/時鐘校正] as StateHook
+  [useServerCountdown\n依 endsAt+offset 倒數] as CountHook
+  [api/client\nREST + 錯誤格式] as ApiClient
+  [realtime/socket\n推播接收+自動重連] as RtClient
+  [DesignTokens\n米白底/撞色按鈕] as Tokens
+  [DevLoginPage\nmock 學生登入] as DevLogin
+  [DevTeacherPanel\n模擬老師操作] as DevPanel
+}
+
+package "shared（前後端共用）" {
+  [answerRules\n500 字上限/空白驗證] as Rules
+  [errorCodes\n錯誤碼+中文訊息] as Codes
+  [realtime\n重連設定] as RtCfg
+}
+
+package "backend（Express + Socket.IO，server-authoritative）" {
+  [config/env\n環境變數驗證] as Env
+  [StudentRouter\nGET /state、POST /submissions] as StudentApi
+  [AuthMiddleware\nJWT → 學生/組別] as Auth
+  [ErrorHandler\n統一錯誤格式] as ErrH
+  [SocketServer\n/student，依組別 room 推播] as Gateway
+  [ActivityStateMachine\n階段/計時器/重啟恢復] as FSM
+  [SubmissionService\n驗證+同步排序（記憶體）] as SubmitSvc
+  [VisibilityFilter\nbuildView：作答中隔離他組] as Filter
+  [ResultService\n結束時以交易寫入] as ResultSvc
+  [Repository\n資料存取] as Repo
+  database "SQLite (node:sqlite)\nactivities / submissions /\nquestion_results" as Store
+}
+
+package "dev only（ENABLE_DEV_TOOLS，正式環境停用）" {
+  [DevAuthRouter\nmock 登入] as DevAuth
+  [DevTeacherRouter\n開放/時間到/結束/下一題/\n結束活動/重設/結果查詢] as DevTeacher
+  [MockSeed\n題目/學生/組別] as Seed
+}
+
+package "Out of scope（後續功能讀取）" #EEEEEE {
+  [F5/F8 老師端] as Teacher
+  [F10/F11 寫回/匯出] as Export
+}
+
+Student --> Page
+Page --> Waiting
+Page --> Answering
+Page --> Result
+Page --> Ended
+Page --> Banner
+Page --> StateHook
+Answering --> Timer
+Answering --> Input
+Timer --> CountHook
+Page ..> Tokens
+StateHook --> ApiClient : 取回目前狀態
+StateHook --> RtClient : 訂閱 state:update
+Input --> ApiClient : 送出答案
+Input ..> Rules
+RtClient ..> RtCfg
+Dev --> DevLogin
+Dev --> DevPanel
+DevLogin --> ApiClient
+DevPanel --> ApiClient
+
+ApiClient --> StudentApi : REST
+ApiClient --> DevAuth : REST (dev)
+ApiClient --> DevTeacher : REST (dev)
+RtClient <--> Gateway : WebSocket／polling
+
+StudentApi --> Auth
+Gateway --> Auth : handshake token
+StudentApi --> SubmitSvc : submit
+StudentApi --> Gateway : pushToTeam
+StudentApi --> Filter : viewFor
+Gateway --> Filter : viewFor（每個 room 各自產生）
+SubmitSvc --> FSM : 檢查 phase
+SubmitSvc ..> Rules
+FSM --> ResultSvc : 題目結束（onQuestionClosed）
+FSM --> Gateway : 階段變化（onChange → pushAll）
+FSM --> Repo : 保存階段
+ResultSvc --> Repo : submissions + result（單一交易）
+Filter ..> Repo : 題目/組別/已結束的送出
+Repo --> Store
+StudentApi ..> ErrH
+ErrH ..> Codes
+Env ..> FSM : 啟動設定
+
+DevAuth --> Auth : 簽發 token
+DevTeacher --> FSM : 模擬老師操作
+DevTeacher --> Repo : 結果/送出查詢
+Seed --> Repo : 寫入 mock 資料
+
+Teacher ..> Store : 讀取
+Export ..> Store : 讀取
+@enduml
