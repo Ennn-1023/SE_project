@@ -1,4 +1,4 @@
-# REST API Contract（001-student-buzzer）
+# REST API Contract（002-student-buzzer）
 
 - Base path：`/api`
 - 所有回應皆為 JSON（UTF-8），時間欄位為 ISO 8601。

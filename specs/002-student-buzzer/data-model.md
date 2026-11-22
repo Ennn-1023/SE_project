@@ -1,4 +1,4 @@
-# Data Model: 學生端搶答系統（001-student-buzzer）
+# Data Model: 學生端搶答系統（002-student-buzzer）
 
 對應 spec 的 Key Entities 與 [diagrams/student-class.png](../../diagrams/student-class.png)。
 「儲存位置」標示資料放在 SQLite（持久）或記憶體（重啟即消失）。

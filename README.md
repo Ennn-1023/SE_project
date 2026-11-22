@@ -1,7 +1,7 @@
 # 課程搶答系統（SE Project）
 
-課堂即時搶答系統。目前完成 **001-student-buzzer：學生端搶答**（roadmap F7、F9 與 F6 學生端部分），
-規格與設計見 [`specs/001-student-buzzer/`](specs/001-student-buzzer/)，架構圖見 [`diagrams/`](diagrams/)。
+課堂即時搶答系統。目前完成 **002-student-buzzer：學生端搶答**（roadmap F7、F9 與 F6 學生端部分），
+規格與設計見 [`specs/002-student-buzzer/`](specs/002-student-buzzer/)，架構圖見 [`diagrams/`](diagrams/)。
 
 | 目錄 | 內容 |
 |------|------|
@@ -63,4 +63,24 @@ npm run dev
 | 前端 | `npm run test -w frontend` |
 | Lint | `npm run lint` |
 
-完整的驗收情境見 [quickstart.md](specs/001-student-buzzer/quickstart.md)。
+完整的驗收情境見 [quickstart.md](specs/002-student-buzzer/quickstart.md)。
+
+## 5. 架構圖（憲章原則 VI）
+
+修改 `diagrams/*.puml` 後，必須重新產生 PNG。需要 Java 與 Graphviz：
+
+```powershell
+winget install EclipseAdoptium.Temurin.21.JRE
+```
+
+```powershell
+winget install Graphviz.Graphviz
+```
+
+再從 [PlantUML releases](https://github.com/plantuml/plantuml/releases) 下載 `plantuml.jar`，放到 `tools/`（已列入 `.gitignore`），然後執行：
+
+```powershell
+java -jar tools/plantuml.jar "./diagrams/*.puml"
+```
+
+程式碼與圖表的一致性驗證紀錄見 [diagram-verification.md](specs/002-student-buzzer/diagram-verification.md)。

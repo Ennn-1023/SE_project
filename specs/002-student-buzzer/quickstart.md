@@ -1,4 +1,4 @@
-# Quickstart & Validation Guide（001-student-buzzer）
+# Quickstart & Validation Guide（002-student-buzzer）
 
 本文件說明如何啟動學生端搶答系統，並用 mock 與模擬老師操作逐一驗證規格。
 API 細節見 [contracts/rest-api.md](contracts/rest-api.md) 與 [contracts/socket-events.md](contracts/socket-events.md)；資料規則見 [data-model.md](data-model.md)。

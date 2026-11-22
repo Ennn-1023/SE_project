@@ -1,11 +1,11 @@
 ---
 
-description: "Task list for 001-student-buzzer"
+description: "Task list for 002-student-buzzer"
 ---
 
 # Tasks: 學生端搶答系統（Student Buzzer）
 
-**Input**: Design documents from `specs/001-student-buzzer/`
+**Input**: Design documents from `specs/002-student-buzzer/`
 
 **Prerequisites**: plan.md、spec.md、research.md、data-model.md、contracts/、quickstart.md
 

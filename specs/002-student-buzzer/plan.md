@@ -1,8 +1,8 @@
 # Implementation Plan: 學生端搶答系統（Student Buzzer）
 
-**Branch**: `001-student-buzzer` | **Date**: 2026-11-20 | **Spec**: [spec.md](spec.md)
+**Branch**: `002-student-buzzer` | **Date**: 2026-11-20 | **Spec**: [spec.md](spec.md)
 
-**Input**: Feature specification from `specs/001-student-buzzer/spec.md`
+**Input**: Feature specification from `specs/002-student-buzzer/spec.md`
 
 ## Summary
 
@@ -60,7 +60,7 @@
 ### Documentation (this feature)
 
 ```text
-specs/001-student-buzzer/
+specs/002-student-buzzer/
 ├── spec.md
 ├── plan.md              # 本檔
 ├── research.md          # Phase 0

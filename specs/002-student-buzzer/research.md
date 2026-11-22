@@ -1,4 +1,4 @@
-# Phase 0 Research: 學生端搶答系統（001-student-buzzer）
+# Phase 0 Research: 學生端搶答系統（002-student-buzzer）
 
 技術選型由使用者於 2026-11-20 指定：後端 Express + TypeScript + Socket.IO、資料庫 SQLite、前端 React + Vite。
 本文件記錄在此前提下的各項設計決策。

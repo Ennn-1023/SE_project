@@ -1,6 +1,6 @@
 # Feature Specification: 學生端搶答系統（Student Buzzer）
 
-**Feature Branch**: `001-student-buzzer`
+**Feature Branch**: `002-student-buzzer`
 
 **Created**: 2026-11-20
 

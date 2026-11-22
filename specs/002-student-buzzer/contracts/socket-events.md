@@ -1,4 +1,4 @@
-# Socket.IO Events Contract（001-student-buzzer）
+# Socket.IO Events Contract（002-student-buzzer）
 
 - Namespace：`/student`
 - 方向：**只有伺服器 → 學生推播**。送出與取回狀態一律走 REST（見 [rest-api.md](rest-api.md)）。
