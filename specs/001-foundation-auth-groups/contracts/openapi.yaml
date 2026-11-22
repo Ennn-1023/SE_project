@@ -35,8 +35,9 @@ components:
               type: string
               enum:
                 - VALIDATION_ERROR      # 400
-                - INVALID_CREDENTIALS   # 401
-                - UNAUTHENTICATED       # 401
+                - INVALID_CURRENT_PASSWORD # 400（修改密碼時目前密碼錯誤；不視為未登入）
+                - INVALID_CREDENTIALS   # 401（登入失敗；前端不視為 session 失效）
+                - UNAUTHENTICATED       # 401（未登入／已登出／逾時；前端唯一導向登入頁的錯誤碼）
                 - FORBIDDEN             # 403
                 - NOT_FOUND             # 404
                 - STUDENT_EXISTS        # 409
@@ -183,12 +184,12 @@ paths:
                   user: { $ref: '#/components/schemas/CurrentUser' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401':
-          description: 學號或密碼錯誤（帳號是否存在一律相同訊息，FR-018）
+          description: 帳號或密碼錯誤（帳號是否存在一律相同訊息，FR-018）
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
               example:
-                error: { code: INVALID_CREDENTIALS, message: 學號或密碼錯誤 }
+                error: { code: INVALID_CREDENTIALS, message: 帳號或密碼錯誤 }
         '423':
           description: 15 分鐘內失敗 5 次，帳號暫時鎖定（FR-019）
           content:
@@ -227,7 +228,7 @@ paths:
   /auth/change-password:
     post:
       tags: [auth]
-      summary: 修改自己的密碼（FR-024）
+      summary: 修改自己的密碼（FR-024；學生與老師皆可）
       requestBody:
         required: true
         content:
@@ -241,12 +242,18 @@ paths:
                 confirmPassword: { type: string }
       responses:
         '204': { description: 修改成功；其他裝置的 session 保持有效 }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401':
-          description: 未登入，或目前密碼錯誤（`field: currentPassword`）
+        '400':
+          description: 新密碼不符規則（`VALIDATION_ERROR`），或目前密碼錯誤（`INVALID_CURRENT_PASSWORD`，`field: currentPassword`；session 保持有效）
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example:
+                error:
+                  code: INVALID_CURRENT_PASSWORD
+                  field: currentPassword
+                  message: 目前密碼不正確
+                  hint: 請重新輸入目前使用中的密碼
+        '401': { $ref: '#/components/responses/Unauthenticated' }
 
   /students:
     get:

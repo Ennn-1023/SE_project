@@ -105,13 +105,19 @@ class GroupService {
   +setGroupCount(n: int): GroupSettings
   +selfSelect(studentId: string, groupNumber: int): Student
   +assign(studentId: string, groupNumber: int?): Student
+  +getMyGroup(studentId: string): MyGroupView
   +overview(): GroupSummary[]
   +unassigned(): Student[]
 }
 
-interface PasswordHasher {
-  +hash(plain: string): string
-  +verify(plain: string, hash: string): boolean
+class MyGroupView {
+  +groupNumber: int? <<null = 未分配>>
+  +groupCount: int
+}
+
+interface PasswordHasher <<scrypt>> {
+  +hash(plain: string): Promise<string>
+  +verify(plain: string, hash: string): Promise<boolean>
 }
 
 interface UserRepository {
@@ -123,10 +129,22 @@ interface UserRepository {
   +updatePassword(userId: string, hash: string, isDefault: boolean): void
   +recordLoginFailure(userId: string, now: DateTime): void
   +resetLoginFailures(userId: string): void
+  +listStudents(): Student[]
+  +findStudentsInGroupsAbove(n: int): Student[]
 }
 
-interface SessionRepository
-interface GroupSettingsRepository
+interface SessionRepository {
+  +create(session: Session): void
+  +findById(id: string): Session?
+  +updateLastActive(id: string, at: DateTime): void
+  +revoke(id: string, at: DateTime): void
+  +revokeAllForUser(userId: string, at: DateTime): void
+}
+
+interface GroupSettingsRepository {
+  +get(): GroupSettings
+  +setGroupCount(n: int, at: DateTime): void
+}
 
 User <|-- Teacher
 User <|-- Student
@@ -134,6 +152,7 @@ User --> Role
 User "1" -- "0..*" Session : 擁有 >
 GroupSettings "1" ..> "0..*" GroupSummary : 定義可用組別 1..N >
 GroupSummary "1" o-- "0..*" Student : 成員 >
+GroupService ..> MyGroupView
 
 AuthService --> UserRepository
 AuthService --> SessionService
@@ -150,6 +169,8 @@ AccountService --> PasswordHasher
 AccountService ..> Config
 AccountService ..> CreateStudentInput
 AccountService ..> AppError : throws
+AccountService --> Clock
+GroupService --> Clock
 GroupService --> UserRepository
 GroupService --> GroupSettingsRepository
 GroupService ..> GroupSummary

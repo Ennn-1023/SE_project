@@ -17,7 +17,7 @@
 **Language/Version**: TypeScript 5.x（`strict: true`），執行於 Node.js 26 LTS（最低 24，需 `node:sqlite`）
 
 **Primary Dependencies**:
-- 後端：Express 5、zod（輸入驗證）、bcryptjs（密碼雜湊）、dotenv（開發時載入 `.env`）、tsx（開發執行）
+- 後端：Express 5、zod（輸入驗證）、Node 內建 `crypto.scrypt`（密碼雜湊，無需套件）、dotenv（開發時載入 `.env`）、tsx（開發執行）
 - 前端：React 19、react-router、Vite、Tailwind CSS v4（`@tailwindcss/vite`）
 
 **Storage**: SQLite（Node 內建 `node:sqlite`，WAL 模式），檔案位置由 `DATABASE_PATH` 設定，預設 `backend/data/app.db`（已被 `.gitignore` 的 `*.db` 規則排除）
@@ -32,7 +32,7 @@
 
 **Constraints**: 320–1920 px 無水平捲動、觸控區 ≥ 44 px（FR-004）；機敏設定只來自環境變數（憲章原則 III）；不得出現明文密碼於回應或 log（FR-020、SC-008）
 
-**Scale/Scope**: 單一班級（約 60 位學生、1–數位老師）、組數 0–50、5 個前端頁面、13 個 API 端點、3 張資料表
+**Scale/Scope**: 單一班級（約 60 位學生、1–數位老師）、組數 0–50、5 個前端頁面、14 個 API 端點、3 張資料表
 
 ## Constitution Check
 
@@ -90,14 +90,14 @@ backend/
 │   ├── config/
 │   │   └── env.ts               # Config
 │   ├── domain/
-│   │   ├── types.ts             # Role、User、Student、Session、GroupSettings、GroupSummary、CreateStudentInput
+│   │   ├── types.ts             # Role、User、Teacher、Student、Session、GroupSettings、GroupSummary、MyGroupView、CreateStudentInput
 │   │   └── ports.ts             # PasswordHasher、各 Repository 介面
 │   ├── lib/
 │   │   ├── db.ts                # node:sqlite 連線與交易工具
 │   │   ├── clock.ts             # Clock（系統時鐘／測試用假時鐘）
 │   │   ├── errors.ts            # AppError 與錯誤碼
 │   │   ├── logger.ts            # Logger（遮罩機敏欄位）
-│   │   └── password.ts          # PasswordHasher（bcryptjs）
+│   │   └── password.ts          # PasswordHasher（crypto.scrypt）
 │   ├── db/
 │   │   ├── migrations.ts        # schema_migrations 與 3 張表
 │   │   ├── userRepository.ts    # UserRepository
@@ -182,25 +182,39 @@ frontend/
 
 | 類別圖元素 | 程式位置 |
 |-----------|----------|
-| `Role`、`User`、`Teacher`、`Student`、`Session`、`GroupSettings`、`GroupSummary`、`CreateStudentInput` | `backend/src/domain/types.ts`（純型別）；資料表見 [data-model.md](data-model.md) |
+| `Role`、`User`、`Teacher`、`Student`、`Session`、`GroupSettings`、`GroupSummary`、`MyGroupView`、`CreateStudentInput` | `backend/src/domain/types.ts`（純型別）；資料表見 [data-model.md](data-model.md) |
 | `AppError` | `backend/src/lib/errors.ts` |
 | `Config` | `backend/src/config/env.ts` |
 | `Clock` | `backend/src/lib/clock.ts` |
 | `PasswordHasher`、`UserRepository`、`SessionRepository`、`GroupSettingsRepository`（interface） | 介面定義於 `backend/src/domain/ports.ts`，實作見組件對照表 |
 | `AuthService`、`SessionService`、`AccountService`、`GroupService` | 見組件對照表；公開方法名稱與類別圖相同 |
+### 基礎設施檔案允許清單
+
+下列檔案不是設計圖中的元素，而是組裝、啟動或支援用的基礎設施；`diagram-consistency.test.ts`（T077）將其視為允許的例外，其餘位於 `routes/`、`services/`、`db/`、`middleware/` 的檔案必須出現在上方對照表。
+
+| 檔案 | 角色 |
+|------|------|
+| `backend/src/app.ts`、`backend/src/server.ts` | 組裝 Express app 與啟動程序 |
+| `backend/src/db/migrations.ts` | 建立資料表（對應組件圖「資料庫」的結構，見 [data-model.md](data-model.md)） |
+| `backend/src/lib/db.ts` | 組件圖「資料庫」的連線與交易工具 |
+| `backend/src/domain/types.ts`、`backend/src/domain/ports.ts` | 類別圖型別與介面的程式定義 |
+| `backend/src/schemas/*.ts` | `Validate` 使用的 zod schema（對應 [openapi.yaml](contracts/openapi.yaml)） |
+| `backend/src/cli/migrate.ts`、`backend/src/cli/seed.ts` | 命令列入口，呼叫 migration 與 `AccountService.seedTeacher` |
+| `frontend/src/main.tsx`、`frontend/src/auth/AuthContext.tsx`、`frontend/src/components/Button.tsx`、`frontend/src/components/Layout.tsx` | 前端進入點、登入狀態與共用元件（屬「UI 風格系統」與各頁面的實作細節） |
+
 ### 時序圖 → 程式流程
 
 | 時序圖 | 端點（[openapi.yaml](contracts/openapi.yaml)） | 主要測試 |
 |--------|------|----------|
 | [001-sequence-login](../../diagrams/001-sequence-login.puml) | `POST /api/auth/login`、受保護請求的 RequireAuth → RequireRole | `tests/integration/auth.test.ts`、`tests/integration/authorization.test.ts` |
 | [001-sequence-create-student](../../diagrams/001-sequence-create-student.puml) | `POST /api/students` | `tests/integration/students.test.ts` |
-| [001-sequence-group](../../diagrams/001-sequence-group.puml) | `PUT /api/groups/settings`、`GET/POST /api/groups/me`、`PUT /api/groups/assignments/{studentId}` | `tests/integration/groups.test.ts` |
+| [001-sequence-group](../../diagrams/001-sequence-group.puml) | `PUT /api/groups/settings`、`GET/POST /api/groups/me`、`PUT /api/groups/assignments/{studentId}` | `tests/integration/groups.selfSelect.test.ts`、`tests/integration/groups.manage.test.ts` |
 
 ## 實作階段的一致性驗證（憲章原則 VI）
 
 `/speckit-implement` 完成後必須：
 
-1. 執行 `npm test --workspace backend`，其中 `diagram-consistency.test.ts` 自動確認組件圖與類別圖的每個元素在上方對照表的檔案中存在對應匯出，且程式中沒有對照表以外的路由／服務／repository 檔案。
+1. 執行 `npm test --workspace backend`，其中 `diagram-consistency.test.ts` 自動確認組件圖與類別圖的每個元素在上方對照表的檔案中存在對應匯出，且程式中沒有對照表與「基礎設施檔案允許清單」以外的路由／服務／repository／中介層檔案。
 2. 依三張時序圖逐步比對實際程式流程（呼叫順序、錯誤碼、分支），於完成回報列出結果。
 3. 若實作需偏離設計，先修改 `.puml`、重新產生 PNG、更新本對照表，再修改程式碼。
 

@@ -33,8 +33,8 @@ end
 == 學生自選組別（僅限未分配） ==
 S -> SH : 開啟首頁
 SH -> R : GET /groups/me
-R -> GS : 取得學生組別與組數
-GS --> SH : groupNumber? 與 N
+R -> GS : getMyGroup(studentId)
+GS --> SH : MyGroupView(groupNumber?, N)
 alt N == 0
   SH --> S : 顯示「老師尚未開放分組」
 else 已分組
@@ -44,15 +44,20 @@ else 未分配
   SH -> R : POST /groups/me {groupNumber: g}
   R -> G : 學生角色檢查
   R -> GS : selfSelect(studentId, g)
-  GS -> GS : 驗證 1 ≤ g ≤ N
-  GS -> UR : updateGroupIfUnassigned(studentId, g)
-  UR -> DB : UPDATE ... SET group = g\nWHERE id = ? AND group IS NULL
-  alt 影響 0 筆（已被老師指派或已選過）
-    GS --> R : AppError(409, "你已分組，如需更換請洽老師", 目前組別)
-  else 成功
-    GS --> R : Student(groupNumber = g)
-    R --> SH : 200
-    SH --> S : 顯示「你在第 g 組」
+  alt N == 0（送出前老師已關閉分組）
+    GS --> R : AppError(409, GROUPS_NOT_OPEN, "老師尚未開放分組")
+  else g 不在 1..N
+    GS --> R : AppError(400, VALIDATION_ERROR, "可選範圍為 1–N", groupCount = N)
+  else 範圍正確
+    GS -> UR : updateGroupIfUnassigned(studentId, g)
+    UR -> DB : UPDATE ... SET group = g\nWHERE id = ? AND group IS NULL
+    alt 影響 0 筆（已被老師指派或已選過）
+      GS --> R : AppError(409, ALREADY_ASSIGNED, "你已分組，如需更換請洽老師", 目前組別)
+    else 成功
+      GS --> R : Student(groupNumber = g)
+      R --> SH : 200
+      SH --> S : 顯示「你在第 g 組」
+    end
   end
 end
 

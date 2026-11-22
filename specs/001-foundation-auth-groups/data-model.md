@@ -25,7 +25,7 @@
 | `account` | TEXT | NOT NULL, UNIQUE；已正規化（去除前後空白、轉大寫） | `User.account`、`Student.studentId` |
 | `display_name` | TEXT | NOT NULL, 1–50 字元 | `User.displayName` |
 | `role` | TEXT | NOT NULL, `CHECK (role IN ('TEACHER','STUDENT'))` | `User.role` |
-| `password_hash` | TEXT | NOT NULL（bcrypt） | `User.passwordHash` |
+| `password_hash` | TEXT | NOT NULL；格式 `scrypt$N$r$p$salt$hash`（research R6） | `User.passwordHash` |
 | `using_default_password` | INTEGER | NOT NULL, 0/1 | `User.usingDefaultPassword` |
 | `group_number` | INTEGER | NULL = 未分配；`CHECK (group_number IS NULL OR group_number >= 1)`；`CHECK (role = 'STUDENT' OR group_number IS NULL)` | `Student.groupNumber` |
 | `failed_login_count` | INTEGER | NOT NULL DEFAULT 0 | `User.failedLoginCount` |

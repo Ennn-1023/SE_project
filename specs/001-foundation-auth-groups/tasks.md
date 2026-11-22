@@ -34,7 +34,7 @@ description: "Task list for F0/F1/F2 foundation, auth and group management"
 **前置**：本機需安裝 Node.js 26 LTS（[quickstart.md](quickstart.md) §1）
 
 - [ ] T001 建立根目錄 `package.json`：npm workspaces `backend`、`frontend`；scripts `dev`（同時啟動前後端）、`test`（依序執行兩個 workspace 的 Vitest）、`lint`、`typecheck`；`engines.node >= 24`
-- [ ] T002 [P] 初始化後端套件 `backend/package.json`（依 research R2、R6、R8：express@5、zod、bcryptjs、dotenv；dev：typescript、tsx、vitest、supertest、@types/*），scripts `dev`、`build`、`test`、`db:migrate`、`db:seed`，並建立 `backend/tsconfig.json`（`strict: true`、ESM、`module: NodeNext`）
+- [ ] T002 [P] 初始化後端套件 `backend/package.json`（依 research R2、R8：express@5、zod、dotenv；密碼雜湊使用內建 `crypto`，不需套件（R6）；dev：typescript、tsx、vitest、supertest、@types/*），scripts `dev`、`build`、`test`、`db:migrate`、`db:seed`，並建立 `backend/tsconfig.json`（`strict: true`、ESM、`module: NodeNext`）
 - [ ] T003 [P] 初始化前端套件 `frontend/package.json`（react@19、react-dom、react-router；dev：vite、@vitejs/plugin-react、tailwindcss@4、@tailwindcss/vite、typescript、vitest、jsdom、@testing-library/react、@testing-library/user-event、@testing-library/jest-dom），建立 `frontend/tsconfig.json` 與 `frontend/index.html`
 - [ ] T004 [P] 建立 `backend/vitest.config.ts`（node 環境、`tests/**/*.test.ts`、測試時 `NODE_ENV=test`）
 - [ ] T005 [P] 建立 `frontend/vite.config.ts`：React 與 Tailwind 外掛、開發伺服器 `/api` 代理至 `http://localhost:3000`（research R12）、Vitest `jsdom` 環境與 `frontend/tests/setup.ts`（載入 jest-dom）
@@ -56,13 +56,13 @@ description: "Task list for F0/F1/F2 foundation, auth and group management"
 - [ ] T010 [P] 實作 `Clock` 於 `backend/src/lib/clock.ts`：`systemClock` 與測試用 `createFakeClock(start)`（可 `advance(ms)`）
 - [ ] T011 [P] 實作 `AppError` 與錯誤碼常數於 `backend/src/lib/errors.ts`：欄位 `status`、`code`、`message`、`field?`、`hint?`、`details?`，錯誤碼與狀態碼對應 research R9 與 `contracts/openapi.yaml` 的 `ErrorResponse.error.code`
 - [ ] T012 [P] 實作 `Logger` 於 `backend/src/lib/logger.ts`：JSON 行輸出、遞迴遮罩 research R11 所列鍵名、`NODE_ENV=test` 預設靜音、可注入輸出目標以便測試
-- [ ] T013 [P] 實作 `PasswordHasher` 於 `backend/src/lib/password.ts`：bcryptjs cost 10 的 `hash`／`verify`，並匯出固定假雜湊供帳號不存在時比對（research R6）
-- [ ] T014 [P] 定義領域型別於 `backend/src/domain/types.ts`（`Role`、`User`、`Teacher`、`Student`、`Session`、`GroupSettings`、`GroupSummary`、`CreateStudentInput`，對應 `diagrams/001-class.puml`）與介面於 `backend/src/domain/ports.ts`（`PasswordHasher`、`UserRepository`、`SessionRepository`、`GroupSettingsRepository`，方法名稱與類別圖一致）
+- [ ] T013 [P] 實作 `PasswordHasher` 於 `backend/src/lib/password.ts`：以 Node 內建 `crypto.scrypt`（非同步、於 libuv 執行緒池執行）實作 async `hash`／`verify`，參數與儲存格式依 research R6，比對使用 `timingSafeEqual`；匯出固定假雜湊供帳號不存在時比對
+- [ ] T014 [P] 定義領域型別於 `backend/src/domain/types.ts`（`Role`、`User`、`Teacher`、`Student`、`Session`、`GroupSettings`、`GroupSummary`、`MyGroupView`、`CreateStudentInput`，對應 `diagrams/001-class.puml`）與介面於 `backend/src/domain/ports.ts`（`PasswordHasher`、`UserRepository`、`SessionRepository`、`GroupSettingsRepository`，方法名稱與類別圖一致）
 - [ ] T015 實作 SQLite 連線於 `backend/src/lib/db.ts`：`node:sqlite` `DatabaseSync`、`PRAGMA foreign_keys = ON`、`journal_mode = WAL`、`transaction(fn)` 工具（`BEGIN IMMEDIATE`）、支援 `:memory:`（research R3）
 - [ ] T016 實作 migration 於 `backend/src/db/migrations.ts`：依 data-model.md 建立 `schema_migrations.version`、`schema_migrations.applied_at`；`users`（`users.account`、`users.display_name`、`users.role`、`users.password_hash`、`users.using_default_password`、`users.group_number`、`users.failed_login_count`、`users.failed_window_started_at`、`users.locked_until`、`users.created_at`、`users.updated_at` 及其索引）；`sessions`（`sessions.id`、`sessions.user_id`、`sessions.created_at`、`sessions.last_active_at`、`sessions.revoked_at` 及索引）；`group_settings`（`group_settings.id`、`group_settings.group_count`、`group_settings.updated_at`，並插入初始列）。重複執行須為冪等
 - [ ] T017 [P] 實作 `UserRepository` 於 `backend/src/db/userRepository.ts`：`findByAccount`、`findStudent`、`createStudent`（`users.account` 唯一衝突轉為可辨識的錯誤）、`updateGroupIfUnassigned`（回傳是否更新成功，條件見 research R4）、`updateGroup`、`updatePassword`、`recordLoginFailure`、`resetLoginFailures`、`listStudents`、`findStudentsInGroupsAbove(n)`；欄位依 data-model.md `users.*`
-- [ ] T018 [P] 實作 `SessionRepository` 於 `backend/src/db/sessionRepository.ts`：建立、依 id 查詢、更新 `sessions.last_active_at`、撤銷單一 session、撤銷某使用者全部 session（設定 `sessions.revoked_at`）
-- [ ] T019 [P] 實作 `GroupSettingsRepository` 於 `backend/src/db/groupSettingsRepository.ts`：讀取與更新 data-model.md `group_settings.group_count`
+- [ ] T018 [P] 實作 `SessionRepository` 於 `backend/src/db/sessionRepository.ts`：方法 `create`、`findById`、`updateLastActive`（data-model.md `sessions.last_active_at`）、`revoke`、`revokeAllForUser`（data-model.md `sessions.revoked_at`），簽章依 `diagrams/001-class.puml`
+- [ ] T019 [P] 實作 `GroupSettingsRepository` 於 `backend/src/db/groupSettingsRepository.ts`：方法 `get`、`setGroupCount`，讀寫 data-model.md `group_settings.group_count` 與 `group_settings.updated_at`，簽章依 `diagrams/001-class.puml`
 - [ ] T020 實作 `SessionService` 於 `backend/src/services/sessionService.ts`：`create`（產生 32 bytes token，儲存 HMAC 值為 `sessions.id`，research R5）、`validate`（檢查 `sessions.revoked_at` 與 `SESSION_IDLE_MINUTES` 閒置逾時，失敗拋 `UNAUTHENTICATED`）、`touch`、`revoke`、`revokeAllForUser`；以注入的 `Clock` 計時
 - [ ] T021 [P] 實作 `Validate` 中介層於 `backend/src/middleware/validate.ts`：接受 zod schema 驗證 body／params，失敗轉為 `AppError(400, VALIDATION_ERROR, field, message, hint)`；非 JSON 的變更請求回 415 `UNSUPPORTED_MEDIA`
 - [ ] T022 [P] 實作 `ErrorHandler` 於 `backend/src/middleware/errorHandler.ts`：`AppError` 轉為 `{ error: {...} }`；其他錯誤回 500 固定訊息並以 `Logger` 記錄（不含堆疊給使用者）
@@ -81,10 +81,10 @@ description: "Task list for F0/F1/F2 foundation, auth and group management"
 ### 前端基礎
 
 - [ ] T031 [P] 建立 UI 風格系統 `frontend/src/styles/theme.css`：Tailwind v4 `@import "tailwindcss"` 與 `@theme` token（research R12 色票）、`body` 米白背景與主要文字色
-- [ ] T032 [P] 實作 `ApiClient` 於 `frontend/src/api/apiClient.ts`：`fetch` + `credentials: 'same-origin'`、JSON 編解碼、將 `ErrorResponse` 轉為 `ApiError`（含 code／field／message／hint／details）、401 時觸發全域「未登入」事件
+- [ ] T032 [P] 實作 `ApiClient` 於 `frontend/src/api/apiClient.ts`：`fetch` + `credentials: 'same-origin'`、JSON 編解碼、將 `ErrorResponse` 轉為 `ApiError`（含 code／field／message／hint／details）；僅在錯誤碼為 `UNAUTHENTICATED` 時觸發全域「未登入」事件（`INVALID_CREDENTIALS` 等其他 401 不觸發，避免登入失敗被當成登出）
 - [ ] T033 [P] 實作共用元件 `frontend/src/components/ErrorMessage.tsx`（顯示 message 與 hint，`role="alert"`）、`frontend/src/components/Button.tsx`（`primary` 深藍撞色、`secondary` 珊瑚橘，`min-h-11 min-w-11`）、`frontend/src/components/Layout.tsx`（RWD 容器、頁首）
-- [ ] T034 實作 `frontend/src/auth/AuthContext.tsx`：載入時呼叫 `GET /api/auth/me`，提供 `user`、`setUser`、`logout`；收到 401 事件時清除狀態；並建立 `frontend/src/main.tsx` 路由表骨架（依 contracts/ui-routes.md，各頁先放占位元件）
-- [ ] T035 [P] 前端測試 `frontend/tests/components.test.tsx`：`ErrorMessage` 顯示 message 與 hint（正常）、沒有 hint 時不顯示空白區塊（邊界）；`Button` 具最小尺寸 class 與兩種變體
+- [ ] T034 實作 `frontend/src/auth/AuthContext.tsx`：載入時呼叫 `GET /api/auth/me`，提供 `user`、`setUser`、`logout`；收到「未登入」事件時清除狀態；並建立 `frontend/src/main.tsx` 路由表骨架（依 contracts/ui-routes.md，各頁先放占位元件）
+- [ ] T035 [P] 前端測試 `frontend/tests/components.test.tsx`：`ErrorMessage` 顯示 message 與 hint（正常）、沒有 hint 時不顯示空白區塊（邊界）；`Button` 具最小尺寸 class 與兩種變體；`ApiClient` 收到 401 `UNAUTHENTICATED` 時觸發「未登入」事件、收到 401 `INVALID_CREDENTIALS` 與 400 `INVALID_CURRENT_PASSWORD` 時不觸發
 
 **Checkpoint**: `npm test` 全數通過；`npm run dev` 可啟動並看到占位頁面
 
@@ -100,7 +100,7 @@ description: "Task list for F0/F1/F2 foundation, auth and group management"
 
 > 先寫測試並確認失敗，再實作
 
-- [ ] T036 [P] [US1] 整合測試 `backend/tests/integration/auth.test.ts`（登入）：老師與學生正確登入回 200、設定 `sid` cookie、回傳正確 `role`（正常）；帳號前後空白與小寫可登入；錯誤密碼與不存在帳號回相同 401 訊息「學號或密碼錯誤」；空白欄位回 400 指出欄位；15 分鐘內第 5 次失敗回 423 並含 `retryAfterSeconds`；鎖定期滿可再登入；視窗過期後失敗重新計數（以假時鐘驗證 data-model.md `users.failed_login_count`、`users.failed_window_started_at`、`users.locked_until` 的狀態轉換）
+- [ ] T036 [P] [US1] 整合測試 `backend/tests/integration/auth.test.ts`（登入）：老師與學生正確登入回 200、設定 `sid` cookie、回傳正確 `role`（正常）；帳號前後空白與小寫可登入；錯誤密碼與不存在帳號回相同 401 訊息「帳號或密碼錯誤」；空白欄位回 400 指出欄位；15 分鐘內第 5 次失敗回 423 並含 `retryAfterSeconds`；鎖定期滿可再登入；視窗過期後失敗重新計數（以假時鐘驗證 data-model.md `users.failed_login_count`、`users.failed_window_started_at`、`users.locked_until` 的狀態轉換）
 - [ ] T037 [P] [US1] 整合測試 `backend/tests/integration/students.test.ts`（建立與清單）：建立學生回 201，`groupNumber` 為 null、`usingDefaultPassword` 為 true（正常）；`b1103` 與既有 `B1103` 衝突回 409 且原帳號不變；學號含空白、符號、3 字元、21 字元與姓名空白、51 字元回 400 並指出欄位（邊界，依 data-model.md `users.account`、`users.display_name`）；`GET /api/students` 依學號排序且不含密碼欄位
 - [ ] T038 [P] [US1] 前端測試 `frontend/tests/LoginPage.test.tsx`：成功登入後老師導向 `/teacher`、學生導向 `/student`；空欄位顯示欄位錯誤；401／423 顯示伺服器訊息
 - [ ] T039 [P] [US1] 前端測試 `frontend/tests/StudentCreatePanel.test.tsx`：建立成功顯示「已建立 學號 姓名」並刷新清單；409 與 400 顯示 `ErrorMessage`
@@ -130,7 +130,7 @@ description: "Task list for F0/F1/F2 foundation, auth and group management"
 
 - [ ] T048 [P] [US2] 整合測試 `backend/tests/integration/authorization.test.ts`：表格驅動逐一呼叫所有老師端點（`GET/POST /api/students`、`POST /api/students/{id}/reset-password`、`PUT /api/groups/settings`、`GET /api/groups/overview`、`PUT /api/groups/assignments/{id}`）：未登入回 401、學生回 403「此功能僅限老師使用」、老師不回 401／403（SC-004）；學生端點（`GET/POST /api/groups/me`）老師呼叫回 403。尚未實作的端點以 `it.todo` 標示，於各 story 完成時改為實際測試
 - [ ] T049 [P] [US2] 整合測試 `backend/tests/integration/logout.test.ts`：登出回 204 且同一 cookie 再呼叫 `/api/auth/me` 回 401（正常）；未登入登出回 401；閒置 2 小時減 1 秒仍有效、達 2 小時回 401（假時鐘，邊界）；同一學生兩裝置登入，其中一台登出不影響另一台
-- [ ] T050 [P] [US2] 前端測試 `frontend/tests/routeGuards.test.tsx`：未登入造訪 `/teacher`、`/student`、`/account/password` 導向 `/login`；學生造訪 `/teacher` 顯示「此功能僅限老師使用」；API 回 401 時導向 `/login`
+- [ ] T050 [P] [US2] 前端測試 `frontend/tests/routeGuards.test.tsx`：未登入造訪 `/teacher`、`/student`、`/account/password` 導向 `/login`；學生造訪 `/teacher` 顯示「此功能僅限老師使用」；API 回 401 `UNAUTHENTICATED` 時導向 `/login`
 
 ### Implementation for User Story 2
 
@@ -138,7 +138,7 @@ description: "Task list for F0/F1/F2 foundation, auth and group management"
 - [ ] T052 [US2] 於 `frontend/src/main.tsx` 實作路由守衛元件（依 contracts/ui-routes.md 的允許角色、未登入、角色不符處理）與 404 頁
 - [ ] T053 [US2] 於 `frontend/src/components/Layout.tsx` 加入登出按鈕（呼叫 `AuthContext.logout` 後導向 `/login`）與目前使用者名稱顯示
 
-**Checkpoint**: US1、US2 測試全部通過；越權與登出行為符合 quickstart §6 步驟 9、15
+**Checkpoint**: US1、US2 測試全部通過；越權與登出行為符合 quickstart §6 步驟 9、15。**注意**：T048 中 US3–US5 端點仍為 `it.todo`，SC-004（100% 老師功能拒絕學生）須待 US5 完成、所有 `it.todo` 轉為實際測試後才算達成
 
 ---
 
@@ -156,7 +156,7 @@ description: "Task list for F0/F1/F2 foundation, auth and group management"
 ### Implementation for User Story 3
 
 - [ ] T056 [P] [US3] 建立 zod schema `backend/src/schemas/groups.ts`：自選 body（`groupNumber` 為正整數，範圍上限於服務層依 data-model.md `group_settings.group_count` 檢查）
-- [ ] T057 [US3] 實作 `GroupService.getSettings` 與 `selfSelect` 於 `backend/src/services/groupService.ts`：依 `diagrams/001-sequence-group.puml`「學生自選組別」段；以 `UserRepository.updateGroupIfUnassigned` 條件式更新 data-model.md `users.group_number`
+- [ ] T057 [US3] 實作 `GroupService.getSettings`、`getMyGroup`（回傳 `MyGroupView`）與 `selfSelect` 於 `backend/src/services/groupService.ts`：依 `diagrams/001-sequence-group.puml`「學生自選組別」段（N = 0 回 409 `GROUPS_NOT_OPEN`、範圍外回 400 並附 `groupCount`）；以 `UserRepository.updateGroupIfUnassigned` 條件式更新 data-model.md `users.group_number`
 - [ ] T058 [US3] 實作 `GroupRoutes` 於 `backend/src/routes/groupRoutes.ts`：`GET /api/groups/settings`（任何已登入者）、`GET /api/groups/me`、`POST /api/groups/me`（`RequireRole(STUDENT)`），並於 `backend/src/app.ts` 註冊；將 T048 中對應的 `it.todo` 改為實際測試
 - [ ] T059 [US3] 擴充 `StudentHome` 於 `frontend/src/pages/StudentHome.tsx`：依 contracts/ui-routes.md「學生首頁狀態」三種狀態呈現，選組按鈕為 RWD 格狀排列（手機 3 欄、桌機 6 欄）
 
@@ -194,7 +194,7 @@ description: "Task list for F0/F1/F2 foundation, auth and group management"
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T066 [P] [US5] 整合測試 `backend/tests/integration/password.test.ts`：`POST /api/auth/change-password` 成功回 204、舊密碼登入 401、新密碼登入 200、`usingDefaultPassword` 變 false（正常）；目前密碼錯誤回 401 並指出 `currentPassword`；新密碼 7 字元、65 字元、等於預設密碼、兩次不一致回 400 並指出欄位（邊界）；`POST /api/students/{id}/reset-password` 回 204，該生兩個裝置的 session 都失效，預設密碼可登入、`usingDefaultPassword` 為 true；不存在學號回 404；使用預設密碼登入的學生 `GET /api/auth/me` 不含任何改密碼要求（FR-027）
+- [ ] T066 [P] [US5] 整合測試 `backend/tests/integration/password.test.ts`：`POST /api/auth/change-password` 成功回 204、舊密碼登入 401、新密碼登入 200、`usingDefaultPassword` 變 false（正常）；目前密碼錯誤回 400 `INVALID_CURRENT_PASSWORD` 並指出 `currentPassword`，且該 session 仍有效（不得被當成登出）；新密碼 7 字元、65 字元、等於預設密碼、兩次不一致回 400 並指出欄位（邊界）；老師修改自己的密碼回 204、新密碼可登入，之後再執行 `AccountService.seedTeacher` 不會覆蓋（FR-024）；`POST /api/students/{id}/reset-password` 回 204，該生兩個裝置的 session 都失效，預設密碼可登入、`usingDefaultPassword` 為 true；不存在學號回 404；使用預設密碼登入的學生 `GET /api/auth/me` 不含任何改密碼要求（FR-027）
 - [ ] T067 [P] [US5] 前端測試 `frontend/tests/ChangePasswordForm.test.tsx`：成功顯示完成訊息；不一致時顯示欄位錯誤且不送出；伺服器錯誤顯示 `ErrorMessage`
 
 ### Implementation for User Story 5
@@ -233,13 +233,13 @@ description: "Task list for F0/F1/F2 foundation, auth and group management"
 
 **Purpose**: 設計一致性驗證、機敏資料檢查、文件與最終驗收
 
-- [ ] T077 [P] 實作 `backend/tests/architecture/diagram-consistency.test.ts`（research R15）：解析 `diagrams/001-component.puml` 與 `diagrams/001-class.puml` 的元素名稱，依 plan.md「設計圖對照表」確認對應檔案存在並匯出同名符號、服務公開方法名稱與類別圖一致；確認 `backend/src/routes`、`services`、`db`、`middleware` 下沒有對照表以外的檔案
-- [ ] T078 [P] 機敏資料測試 `backend/tests/integration/noSecretsLeak.test.ts`（SC-008）：執行登入、建立學生、改密碼、重設密碼、錯誤情境，擷取所有回應 body 與 Logger 輸出，斷言其中不含測試用預設密碼、老師密碼、session secret、`sid` token 與任何 bcrypt 雜湊
-- [ ] T079 [P] 併發測試 `backend/tests/integration/concurrency.test.ts`（SC-007）：60 位學生同時登入並自選組別，全部在合理時間內完成、每人恰屬一組；同時對同一學生送出自選與老師指派，結果以先完成的有效操作為準且無錯誤狀態
+- [ ] T077 [P] 實作 `backend/tests/architecture/diagram-consistency.test.ts`（research R15）：解析 `diagrams/001-component.puml` 與 `diagrams/001-class.puml` 的元素名稱，依 plan.md「設計圖對照表」確認對應檔案存在並匯出同名符號、服務公開方法名稱與類別圖一致，repository 介面方法也須與類別圖一致；確認 `backend/src/routes`、`services`、`db`、`middleware` 下的每個檔案都在對照表或 plan.md「基礎設施檔案允許清單」中
+- [ ] T078 [P] 機敏資料測試 `backend/tests/integration/noSecretsLeak.test.ts`（SC-008）：執行登入、建立學生、改密碼、重設密碼、錯誤情境，擷取所有回應 body 與 Logger 輸出，斷言其中不含測試用預設密碼、老師密碼、session secret、`sid` token 與任何密碼雜湊（`users.password_hash` 的值）
+- [ ] T079 [P] 併發測試 `backend/tests/integration/concurrency.test.ts`（SC-007）：使用正式的 scrypt 參數（research R6），60 位學生同時登入後同時自選組別，斷言每個請求從送出到收到回應皆 ≤ 3 秒、每人恰屬一組；同時對同一未分配學生送出自選與老師指派（重複多輪），斷言最終 data-model.md `users.group_number` 一律等於老師指派的組別（US3-5、FR-035），學生端回應為 409 `ALREADY_ASSIGNED`，或回 200 後被老師指派覆寫，且無 500 或其他錯誤狀態
 - [ ] T080 [P] 撰寫根目錄 `README.md`：專案簡介、前置需求、設定與啟動指令（引用 quickstart.md）、測試指令、設計圖重新產生指令
 - [ ] T081 執行 `java -jar plantuml.jar -charset UTF-8 "./diagrams/*.puml"`，確認所有 PNG 與 `.puml` 同步
 - [ ] T082 執行 `npm run lint`、`npm run typecheck`、`npm test`，全部通過並記錄通過／失敗數量
-- [ ] T083 依 quickstart.md §5–§8 完成手動驗證；依三張時序圖逐步比對程式流程（憲章原則 VI），將結果與 T082 的測試指令與數量寫入完成回報（憲章原則 V）
+- [ ] T083 依 quickstart.md §5–§8 完成手動驗證（含 §6 計時檢查 SC-001～SC-003）；依三張時序圖逐步比對程式流程（憲章原則 VI），將結果與 T082 的測試指令與數量寫入完成回報（憲章原則 V）
 
 ---
 

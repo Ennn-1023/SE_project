@@ -44,10 +44,10 @@
 
 ## R6. 密碼雜湊
 
-- **Decision**: `bcryptjs`，cost factor 10。
-- **Rationale**: 純 JavaScript、免原生編譯；cost 10 單次約 50–100 ms，60 人同時登入仍在 SC-007 的 3 秒內。
-- **Alternatives considered**: `argon2`（需原生編譯）；Node 內建 `crypto.scrypt`（可行，但 bcrypt 為課程常見教材，組員較熟悉）。
-- **帳號列舉防護**: 帳號不存在時仍對一組固定的假雜湊執行 `compare`，讓回應時間與密碼錯誤相近（FR-018）。
+- **Decision**: Node 內建 `crypto.scrypt`（非同步版本），參數 `N = 16384, r = 8, p = 1`、16 bytes 隨機 salt、64 bytes 輸出；儲存格式 `scrypt$N$r$p$<salt base64>$<hash base64>`，驗證時以 `crypto.timingSafeEqual` 比對。
+- **Rationale**: 非同步 scrypt 在 libuv 執行緒池（預設 4 條）平行計算，不阻塞主執行緒；單次約 30–60 ms，60 人同時登入約在 1 秒內全部完成，符合 SC-007 的 3 秒上限。內建模組免原生編譯、免額外套件。參數寫入雜湊字串，日後調整不影響舊密碼驗證。
+- **Alternatives considered**: `bcryptjs`（純 JavaScript 在主執行緒同步計算，60 人同時登入會排隊，最後一人約需 3–6 秒，可能違反 SC-007）；`argon2`、`bcrypt`（需原生編譯，Windows 組員需安裝建置工具）。
+- **帳號列舉防護**: 帳號不存在時仍對一組固定的假雜湊執行 `verify`，讓回應時間與密碼錯誤相近（FR-018）。
 
 ## R7. 登入失敗鎖定
 
