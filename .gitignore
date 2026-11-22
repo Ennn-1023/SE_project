@@ -9,6 +9,14 @@
 credentials*.json
 service-account*.json
 
+# 本機資料庫（SQLite 主檔與 WAL/SHM 暫存檔，可能含帳號與密碼雜湊）
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+
 # 相依套件
 node_modules/
 .venv/
