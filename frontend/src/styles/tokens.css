@@ -1,0 +1,47 @@
+/* F0 設計系統 tokens（roadmap.md F0）：米白底色、撞色按鈕、mobile-first */
+:root {
+  /* 色票 */
+  --color-bg: #faf7f0;
+  --color-surface: #f5f0e6;
+  --color-surface-strong: #ece4d4;
+  --color-border: #d9cfbd;
+  --color-text: #2b2a27;
+  --color-text-muted: #6b665c;
+  --color-primary: #1f3a93;
+  --color-primary-hover: #182e75;
+  --color-on-primary: #ffffff;
+  --color-accent: #ff6b4a;
+  --color-accent-hover: #e8573a;
+  --color-on-accent: #ffffff;
+  --color-success: #1d7a4f;
+  --color-success-bg: #e3f2ea;
+  --color-danger: #b42318;
+  --color-danger-bg: #fdecea;
+  --color-disabled: #c9c2b4;
+
+  /* 字級 */
+  --font-family: 'Noto Sans TC', 'Microsoft JhengHei', 'PingFang TC', system-ui, sans-serif;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5rem;
+  --font-size-xxl: 2.25rem;
+
+  /* 間距與圓角 */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1.25rem;
+  --shadow-card: 0 2px 8px rgb(43 42 39 / 8%);
+
+  /* 觸控與版面 */
+  --touch-min: 44px;
+  --content-max: 720px;
+  /* 斷點（僅供參考；media query 不能使用變數）：手機 < 640px、平板 640–1024px、桌機 > 1024px */
+  --bp-tablet: 640px;
+  --bp-desktop: 1024px;
+}

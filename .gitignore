@@ -43,3 +43,7 @@ desktop.ini
 
 # Claude Code 個人設定
 .claude/settings.local.json
+
+# SQLite 資料庫檔
+backend/data/*.db
+backend/data/*.db-*

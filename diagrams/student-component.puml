@@ -1,0 +1,80 @@
+@startuml student-component
+title 學生端搶答系統 — Component Diagram (001-student-buzzer)
+skinparam defaultFontName "Microsoft JhengHei"
+skinparam backgroundColor #FAF7F0
+skinparam componentStyle rectangle
+skinparam component {
+  BackgroundColor #F5F0E6
+  BorderColor #1F3A93
+}
+skinparam package {
+  BorderColor #1F3A93
+}
+
+actor "學生\nStudent" as Student
+actor "開發/測試者\nDeveloper" as Dev
+
+package "Student Client（RWD, mobile-first）" {
+  [StudentApp\n階段路由] as App
+  [WaitingView\n等待老師開放題目] as Waiting
+  [AnsweringView\n題目/作答區/倒數] as Answering
+  [ResultView\n全組答案+本組成敗] as Result
+  [ActivityEndedView\n活動結束提示] as Ended
+  [CountdownTimer\n依 endsAt 倒數] as Timer
+  [AnswerInput\n空白/500字驗證] as Input
+  [RealtimeClient\n推播接收+自動重連] as RtClient
+  [DesignTokens\n米白底/撞色按鈕] as Tokens
+}
+
+package "Backend（server-authoritative）" {
+  [RealtimeGateway\n依角色/組別推播] as Gateway
+  [StudentStateAPI\n取回目前狀態] as StateAPI
+  [SubmissionService\n驗證+原子排序] as SubmitSvc
+  [ActivityStateMachine\n階段/計時器] as FSM
+  [VisibilityFilter\n作答中隔離他組資料] as Filter
+  [ResultService\n產生題目結果] as ResultSvc
+  database "SQLite (node:sqlite)\nSubmissions / QuestionResults" as Store
+}
+
+package "Dev/Test only（正式環境停用）" {
+  [MockDataProvider\n題目/學生/組別] as Mock
+  [MockTeacherControl\n開放/時間到/手動結束/下一題/結束活動] as MockCtl
+}
+
+package "Out of scope（後續功能讀取）" #EEEEEE {
+  [F5/F8 老師端] as Teacher
+  [F10/F11 寫回/匯出] as Export
+}
+
+Student --> App
+App --> Waiting
+App --> Answering
+App --> Result
+App --> Ended
+Answering --> Timer
+Answering --> Input
+App ..> Tokens
+App --> RtClient
+
+RtClient <--> Gateway : 階段推播 / 本組已送出
+RtClient --> StateAPI : 重新整理/重連取回狀態
+Input --> SubmitSvc : 送出答案
+
+SubmitSvc --> FSM : 檢查是否作答中
+SubmitSvc --> Store : 寫入 Submission(順位)
+SubmitSvc --> Gateway : 通知本組成員
+FSM --> ResultSvc : 題目結束
+ResultSvc --> Store : 寫入 QuestionResult
+FSM --> Gateway : 階段變化
+Gateway --> Filter
+StateAPI --> Filter
+Filter --> Store
+
+Dev --> MockCtl
+MockCtl --> FSM : 模擬老師操作
+Mock --> FSM : 題目
+Mock --> SubmitSvc : 學生/組別
+
+Teacher ..> Store : 讀取
+Export ..> Store : 讀取
+@enduml
