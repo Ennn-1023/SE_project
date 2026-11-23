@@ -34,9 +34,17 @@ else 輸入合法
   else 帳號不存在 或 密碼錯誤
     AS -> H : verify(password, hash)
     H --> AS : false
-    AS -> UR : recordLoginFailure(userId)
-    note right : 失敗 5 次（15 分鐘內）\n→ lockedUntil = now + 15 分鐘
-    AS --> R : AppError(401, "帳號或密碼錯誤")
+    opt 帳號存在
+      AS -> UR : recordLoginFailure(userId)
+      note right : 失敗 5 次（15 分鐘內）\n→ lockedUntil = now + 15 分鐘
+      AS -> UR : findById(userId)
+      UR --> AS : user（含 lockedUntil）
+    end
+    alt 本次失敗使帳號被鎖定（第 5 次）
+      AS --> R : AppError(423, "嘗試次數過多，請 X 分鐘後再試")
+    else 未鎖定
+      AS --> R : AppError(401, "帳號或密碼錯誤")
+    end
   else 驗證成功
     AS -> H : verify(password, hash)
     H --> AS : true
