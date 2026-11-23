@@ -121,8 +121,10 @@ interface PasswordHasher <<scrypt>> {
 }
 
 interface UserRepository {
+  +findById(userId: string): User?
   +findByAccount(account: string): User?
   +findStudent(studentId: string): Student?
+  +createTeacher(account: string, displayName: string, hash: string): Teacher
   +createStudent(studentId: string, name: string, hash: string): Student <<學號重複時失敗>>
   +updateGroupIfUnassigned(studentId: string, groupNumber: int): boolean
   +updateGroup(studentId: string, groupNumber: int?): void

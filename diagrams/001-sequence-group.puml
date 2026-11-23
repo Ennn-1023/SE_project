@@ -20,9 +20,9 @@ database "DB" as DB
 T -> GM : 設定組數 N
 GM -> R : PUT /groups/settings {groupCount: N}
 R -> G : 老師角色檢查
+R -> R : Validate：N 為 0–50 的整數（否則 400）
 R -> GS : setGroupCount(N)
-GS -> GS : 驗證 0 ≤ N ≤ 50 且為整數
-GS -> UR : 查詢 groupNumber > N 的學生
+GS -> UR : 於交易內查詢 groupNumber > N 的學生
 alt 被移除的組別仍有成員
   GS --> R : AppError(409, "第 k 組仍有成員：...，請先移出")
 else 可調整
@@ -43,6 +43,7 @@ else 未分配
   S -> SH : 選擇第 g 組
   SH -> R : POST /groups/me {groupNumber: g}
   R -> G : 學生角色檢查
+  R -> R : Validate：g 為正整數（否則 400，附最新組數）
   R -> GS : selfSelect(studentId, g)
   alt N == 0（送出前老師已關閉分組）
     GS --> R : AppError(409, GROUPS_NOT_OPEN, "老師尚未開放分組")
@@ -65,8 +66,9 @@ end
 T -> GM : 將學生甲改到第 g 組 / 改回未分配
 GM -> R : PUT /groups/assignments/{studentId} {groupNumber: g | null}
 R -> G : 老師角色檢查
+R -> R : Validate：學號格式、g 為正整數或 null（否則 400）
 R -> GS : assign(studentId, g)
-GS -> GS : 驗證 g 為 null 或 1 ≤ g ≤ N
+GS -> GS : 學生存在（否則 404）且 g 為 null 或 g ≤ N（否則 400）
 GS -> UR : updateGroup(studentId, g)
 UR -> DB : UPDATE
 GS --> R : Student

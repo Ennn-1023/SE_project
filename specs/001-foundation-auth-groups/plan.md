@@ -17,7 +17,7 @@
 **Language/Version**: TypeScript 5.x（`strict: true`），執行於 Node.js 26 LTS（最低 24，需 `node:sqlite`）
 
 **Primary Dependencies**:
-- 後端：Express 5、zod（輸入驗證）、Node 內建 `crypto.scrypt`（密碼雜湊，無需套件）、dotenv（開發時載入 `.env`）、tsx（開發執行）
+- 後端：Express 5、zod 4（輸入驗證）、Node 內建 `crypto.scrypt`（密碼雜湊，無需套件）、dotenv（開發時載入 `.env`）、tsx（開發執行）
 - 前端：React 19、react-router、Vite、Tailwind CSS v4（`@tailwindcss/vite`）
 
 **Storage**: SQLite（Node 內建 `node:sqlite`，WAL 模式），檔案位置由 `DATABASE_PATH` 設定，預設 `backend/data/app.db`（已被 `.gitignore` 的 `*.db` 規則排除）
@@ -200,7 +200,7 @@ frontend/
 | `backend/src/domain/types.ts`、`backend/src/domain/ports.ts` | 類別圖型別與介面的程式定義 |
 | `backend/src/schemas/*.ts` | `Validate` 使用的 zod schema（對應 [openapi.yaml](contracts/openapi.yaml)） |
 | `backend/src/cli/migrate.ts`、`backend/src/cli/seed.ts` | 命令列入口，呼叫 migration 與 `AccountService.seedTeacher` |
-| `frontend/src/main.tsx`、`frontend/src/auth/AuthContext.tsx`、`frontend/src/components/Button.tsx`、`frontend/src/components/Layout.tsx` | 前端進入點、登入狀態與共用元件（屬「UI 風格系統」與各頁面的實作細節） |
+| `frontend/src/main.tsx`、`frontend/src/auth/AuthContext.tsx`、`frontend/src/components/Button.tsx`、`frontend/src/components/Layout.tsx`、`frontend/src/components/TextField.tsx` | 前端進入點、登入狀態與共用元件（屬「UI 風格系統」與各頁面的實作細節） |
 
 ### 時序圖 → 程式流程
 
@@ -220,7 +220,18 @@ frontend/
 
 ## Post-Design Constitution Re-check
 
-Phase 1 產出（data-model、contracts、quickstart）完成後重新檢查上方表格：六項原則皆維持 ✅。設計過程中的兩處偏離——帳號鎖定改用 423、類別圖補上 `Clock` 與 `Config` 欄位、`User.failedWindowStartedAt`——皆已先更新設計圖並重新產生 PNG，符合原則 VI。
+Phase 1 產出（data-model、contracts、quickstart）完成後重新檢查上方表格：六項原則皆維持 ✅。設計過程中的偏離——帳號鎖定改用 423、類別圖補上 `Clock` 與 `Config` 欄位、`User.failedWindowStartedAt`——皆已先更新設計圖並重新產生 PNG，符合原則 VI。
+
+### 實作階段的設計變更（皆已先更新設計圖並重新產生 PNG）
+
+| 變更 | 原因 | 更新的圖 |
+|------|------|----------|
+| `UserRepository.findById`、`createTeacher` | RequireAuth 需由 session 取得使用者；`seedTeacher` 需建立老師帳號 | 001-class |
+| `RequireAuth --> UserRepository` | 同上 | 001-component、001-sequence-login |
+| 組數與組別編號的格式驗證位於 `Validate` 中介層，`GroupService` 只檢查範圍與學生是否存在 | 憲章原則 I：在進入點驗證 | 001-sequence-group |
+| 登入只驗證必填（不驗學號格式） | 老師帳號不是學號格式 | 001-sequence-login |
+| 新增 `frontend/src/components/TextField.tsx` | 表單欄位與錯誤訊息的共用元件 | （列入基礎設施允許清單） |
+| zod 升級為 4（`^4.6.7`）：缺漏／型別錯誤訊息改用 `fieldError()` 產生的 `error` 參數；設定預設值改為輸出型別（數字） | 與 main 分支（002-student-buzzer）使用相同主版本，降低合併衝突 | （不影響設計圖） |
 
 ## Complexity Tracking
 

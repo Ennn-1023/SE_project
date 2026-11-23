@@ -19,7 +19,7 @@ database "DB" as DB
 U -> LP : 輸入帳號、密碼並送出
 LP -> API : login(account, password)
 API -> R : POST /auth/login
-R -> V : 驗證必填、學號格式
+R -> V : 驗證必填（帳號、密碼）
 alt 輸入不合法
   V --> R : AppError(400, field, message, hint)
   R --> API : 400 錯誤
@@ -62,6 +62,7 @@ alt 無效 / 已登出 / 閒置逾 2 小時
   SS --> R : AppError(401, "請重新登入")
   R --> API : 401 → 導向登入頁
 else 有效
+  R -> UR : findById(session.userId)
   SS -> SS : touch(sessionId)
   alt 角色不是 TEACHER
     R --> API : AppError(403, "此功能僅限老師使用")

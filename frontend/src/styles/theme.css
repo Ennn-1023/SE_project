@@ -1,0 +1,33 @@
+/* UI 風格系統（組件圖：米白色系 / 撞色按鈕 tokens；research R12）。所有頁面只使用這些 token。 */
+@import 'tailwindcss';
+
+@theme {
+  --color-cream-50: #faf7f0;
+  --color-cream-100: #f5f0e6;
+  --color-cream-300: #e6dcc8;
+  --color-ink: #2b2a28;
+  --color-accent: #1f3a93;
+  --color-accent-2: #ff6b4a;
+  --color-danger: #b42318;
+}
+
+html,
+body {
+  background-color: var(--color-cream-50);
+  color: var(--color-ink);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  overflow-x: hidden;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    'Noto Sans TC',
+    'PingFang TC',
+    'Microsoft JhengHei',
+    sans-serif;
+  line-height: 1.5;
+}

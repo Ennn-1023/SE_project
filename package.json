@@ -1,0 +1,29 @@
+{
+  "name": "se-project",
+  "private": true,
+  "description": "課程搶答系統（F0/F1/F2：基礎建設、登入權限與組別管理）",
+  "type": "module",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,magenta \"npm run dev --workspace backend\" \"npm run dev --workspace frontend\"",
+    "test": "npm test --workspace backend && npm test --workspace frontend",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck --workspace backend && npm run typecheck --workspace frontend",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.7",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.73.0"
+  }
+}

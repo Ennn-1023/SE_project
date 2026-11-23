@@ -92,6 +92,7 @@ GroupService --> UserRepo
 GroupService --> GroupRepo
 SessionService --> SessionRepo
 RequireAuth --> SessionService
+RequireAuth --> UserRepo
 
 UserRepo --> DB
 SessionRepo --> DB
