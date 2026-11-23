@@ -11,7 +11,7 @@ describe('Logger', () => {
   it('一般欄位正常輸出為 JSON 行（正常）', () => {
     const { logger, lines } = capture();
     logger.info('hello', { userId: 3, path: '/api/x' });
-    expect(JSON.parse(lines[0])).toEqual({
+    expect(JSON.parse(lines[0]!)).toEqual({
       time: '1970-01-01T00:00:00.000Z',
       level: 'info',
       message: 'hello',
@@ -28,7 +28,7 @@ describe('Logger', () => {
       headers: [{ cookie: 'sid=abc-token' }],
       passwordHash: 'scrypt$x',
     });
-    const out = lines[0];
+    const out = lines[0]!;
     for (const leaked of ['p1-secret', 'p2-secret', 's3-secret', 'abc-token', 'scrypt$x']) {
       expect(out).not.toContain(leaked);
     }

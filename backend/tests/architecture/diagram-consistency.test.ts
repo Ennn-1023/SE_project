@@ -42,13 +42,18 @@ const tableRows = (text: string) =>
         .map((c) => c.trim()),
     );
 
-const backticks = (cell: string) => [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+/** 正規表示式擷取群組（不存在時為空字串）。 */
+const grp = (m: RegExpMatchArray, i: number): string => m[i] ?? '';
+
+const backticks = (cell: string | undefined) =>
+  [...(cell ?? '').matchAll(/`([^`]+)`/g)].map((m) => grp(m, 1));
 
 /** 組件圖 → 檔案（每列兩組「組件｜檔案」）。 */
 const componentMap = new Map<string, string[]>();
 for (const row of tableRows(section(plan, '### 組件圖 → 檔案')).slice(1)) {
   for (let i = 0; i + 1 < row.length; i += 2) {
-    if (row[i]) componentMap.set(row[i], backticks(row[i + 1]));
+    const name = row[i];
+    if (name) componentMap.set(name, backticks(row[i + 1]));
   }
 }
 
@@ -74,15 +79,15 @@ interface DiagramComponent {
 
 const components: DiagramComponent[] = [
   ...[...componentPuml.matchAll(/\[([^\]]+)\]\s+as\s+\w+/g)].map((m) => {
-    const label = m[1];
+    const label = grp(m, 1);
     // PlantUML 標籤以字面「\n」換行；取其中整行為英文識別名者（例如「登入頁\nLoginPage」→ LoginPage）
     const parts = label.split('\\n').map((p) => p.trim());
     const ident = parts.find((p) => /^[A-Z][A-Za-z]+$/.test(p));
-    return { label, key: ident ?? parts[0] };
+    return { label, key: ident ?? parts[0] ?? label };
   }),
   ...[...componentPuml.matchAll(/^(?:database|file)\s+"([^"]+)"/gm)].map((m) => ({
-    label: m[1],
-    key: m[1].split('\\n')[0].trim(),
+    label: grp(m, 1),
+    key: (grp(m, 1).split('\\n')[0] ?? '').trim(),
   })),
 ];
 
@@ -103,12 +108,14 @@ for (const m of classPuml.matchAll(
   const kind = m[1] === 'abstract class' ? 'class' : (m[1] as DiagramClass['kind']);
   classes.push({
     kind,
-    name: m[2],
-    methods: lines.filter((l) => /^[+-]\w+\(/.test(l)).map((l) => l.match(/^[+-](\w+)\(/)![1]),
+    name: grp(m, 2),
+    methods: lines.filter((l) => /^[+-]\w+\(/.test(l)).map((l) => grp(l.match(/^[+-](\w+)\(/)!, 1)),
     staticMethods: lines
       .filter((l) => /^\{static\}\s*[+-]\w+\(/.test(l))
-      .map((l) => l.match(/(\w+)\(/)![1]),
-    attributes: lines.filter((l) => /^[+-]\w+\s*:/.test(l)).map((l) => l.match(/^[+-](\w+)/)![1]),
+      .map((l) => grp(l.match(/(\w+)\(/)!, 1)),
+    attributes: lines
+      .filter((l) => /^[+-]\w+\s*:/.test(l))
+      .map((l) => grp(l.match(/^[+-](\w+)/)!, 1)),
   });
 }
 
@@ -131,12 +138,12 @@ function block(source: string, kind: 'class' | 'interface', name: string): strin
 
 function classPublicMethods(body: string): string[] {
   return [...body.matchAll(/^ {2}(?:async\s+)?([a-zA-Z]\w*)\s*(?:<[^>]*>)?\(/gm)]
-    .map((m) => m[1])
+    .map((m) => grp(m, 1))
     .filter((n) => n !== 'constructor');
 }
 
 function interfaceMethods(body: string): string[] {
-  return [...body.matchAll(/^ {2}([a-zA-Z]\w*)\s*\(/gm)].map((m) => m[1]);
+  return [...body.matchAll(/^ {2}([a-zA-Z]\w*)\s*\(/gm)].map((m) => grp(m, 1));
 }
 
 const sorted = (xs: string[]) => [...new Set(xs)].sort();
@@ -168,7 +175,7 @@ describe('組件圖 001-component ↔ 程式碼', () => {
     const tsFile = existing.find((f) => /\.(ts|tsx)$/.test(f));
     if (tsFile && /^[A-Z][A-Za-z]+$/.test(key)) {
       const src = read(tsFile);
-      const lowerFirst = key[0].toLowerCase() + key.slice(1);
+      const lowerFirst = key.charAt(0).toLowerCase() + key.slice(1);
       expect(
         exportsSymbol(src, key) || exportsSymbol(src, lowerFirst),
         `${tsFile} 未匯出 ${key}（或 ${lowerFirst}）`,

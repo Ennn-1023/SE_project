@@ -1,0 +1,212 @@
+@startuml student-class
+title 學生端搶答系統 — Class Diagram (002-student-buzzer)
+skinparam defaultFontName "Microsoft JhengHei"
+skinparam backgroundColor #FAF7F0
+skinparam class {
+  BackgroundColor #F5F0E6
+  BorderColor #1F3A93
+  ArrowColor #1F3A93
+}
+hide empty members
+
+package "shared" {
+  enum ActivityPhase {
+    WAITING  等待開放
+    ANSWERING  作答中
+    CLOSED  已結束
+    ENDED  活動結束
+  }
+
+  enum ErrorCode {
+    VALIDATION_ERROR
+    EMPTY_ANSWER
+    ANSWER_TOO_LONG
+    UNAUTHORIZED
+    NO_TEAM
+    QUESTION_NOT_FOUND
+    NOT_FOUND
+    QUESTION_NOT_OPEN
+    QUESTION_CLOSED
+    ALREADY_SUBMITTED
+    ACTIVITY_ENDED
+    INVALID_TRANSITION
+    QUESTION_ALREADY_CLOSED
+    INVALID_SECONDS
+    INTERNAL_ERROR
+  }
+
+  class StudentView <<DTO>> {
+    +phase: ActivityPhase
+    +serverNow: string
+    +myTeam: TeamRef?
+    {field} +question: QuestionView? [ANSWERING/CLOSED]
+    {field} +endsAt: string? [ANSWERING]
+    {field} +myTeamSubmission: {answer}? [ANSWERING/CLOSED，僅本組]
+    {field} +results: TeamAnswer[]? [僅 CLOSED]
+    {field} +myTeamOutcome: WIN | LOSE | NOT_SUBMITTED [僅 CLOSED]
+  }
+
+  class TeamAnswer <<DTO>> {
+    +rank: int
+    +teamName: string
+    +answer: string
+    +isWinner: bool
+  }
+
+  class AnswerRules <<module>> {
+    +MAX_ANSWER_LENGTH = 500
+    +countChars(s): int
+    +validateAnswer(raw): AnswerCheck
+  }
+}
+
+package "backend/domain" {
+  class Activity {
+    +id: string
+    +phase: ActivityPhase
+    +currentQuestionId: string?
+    {field} +endsAt: number? [epoch ms，僅 ANSWERING]
+  }
+
+  class Question {
+    +questionId: string
+    +activityId: string
+    +number: int
+    +text: string
+  }
+
+  class Team <<由 001 組別推導>> {
+    {field} +teamId: string [T{n}，n = 001 組別編號 1..組數]
+    +activityId: string
+    {field} +name: string [第 n 組]
+  }
+
+  class Student <<由 001 users 推導>> {
+    {field} +studentId: string [users.account（學號）]
+    {field} +name: string [users.display_name]
+    {field} +teamId: string? [T{group_number}；null = 未分組]
+  }
+
+  class Submission {
+    +activityId: string
+    +questionId: string
+    +teamId: string
+    +studentId: string
+    {field} +answer: string [1..500 字]
+    {field} +receivedAt: number [伺服器 epoch ms]
+    +rank: int
+  }
+
+  class QuestionResult {
+    +activityId: string
+    +questionId: string
+    +answer: string?
+    +winnerTeam: string?
+    +submittedAt: number?
+    +closedReason: TIME_UP | MANUAL | ACTIVITY_ENDED
+    +closedAt: number
+  }
+
+  class ActivityStateMachine <<同時只有一場>> {
+    +hooks: MachineHooks
+    +activity: Activity
+    +status(): TeacherStatus
+    +open(questionId, seconds = 60)
+    +timeUp()
+    +manualClose()
+    +closeQuestion(reason): bool  (冪等)
+    +next()
+    +end()
+    +reset()  (dev only)
+    +recoverAfterRestart(): bool
+    +dispose()
+  }
+
+  class MachineHooks <<interface>> {
+    +onQuestionOpened(questionId)
+    +onQuestionClosed(questionId, reason)
+    +onReset()
+    +onChange(activity)
+  }
+
+  class SubmissionService {
+    -byTeam: Map<teamId, Submission>
+    +startQuestion(questionId)
+    +clear()
+    +submit(student, questionId, rawAnswer): Submission
+    +forTeam(teamId): Submission?
+    +all(): Submission[]
+  }
+
+  class VisibilityFilter <<module>> {
+    +buildView(input: ViewInput): StudentView
+  }
+
+  class ViewInput {
+    +activity: Activity
+    +question: Question?
+    +myTeam: Team?
+    +teams: Team[]
+    +submissions: Submission[]
+    +now: number
+  }
+
+  class ResultService {
+    +finalize(activityId, questionId, submissions, reason, now): QuestionResult
+  }
+}
+
+package "backend/data + http" {
+  class Repository {
+    +getCurrentActivity(): Activity?
+    +saveActivity(activity)
+    +getQuestion(id) / listQuestions()
+    {method} +getTeam(id) / listTeams() [讀 group_settings.group_count]
+    {method} +getStudent(id) / listStudents() [讀 users（role = STUDENT）]
+    +hasResult(activityId, questionId): bool
+    +listResults(activityId): QuestionResult[]
+    +listSubmissions(activityId, questionId): Submission[]
+    +saveQuestionOutcome(submissions, result)  (單一交易)
+    +clearOutcomes(activityId)
+  }
+
+  class AppError {
+    +code: ErrorCode
+    +field: string?
+    +params
+  }
+
+  class DevTeacherRouter <<dev only>> {
+    GET /status
+    POST /open {questionId, seconds 5..600}
+    POST /time-up, /close, /next, /end, /reset
+    GET /results, /submissions
+  }
+}
+
+Activity "1" --> "0..1" Question : current
+Activity "1" o-- "*" Question
+Activity ..> "*" Team : 本場可參與的組別（= 001 組數）
+Team "1" o-- "*" Student : 001 組別指派
+Submission "*" --> "1" Question
+Submission "*" --> "1" Team : 每組每題至多 1 筆
+Submission "*" --> "1" Student : submittedBy
+QuestionResult "0..1" --> "1" Question
+QuestionResult ..> Submission : winner = rank 1
+StudentView *-- "*" TeamAnswer
+
+ActivityStateMachine *-- Activity
+ActivityStateMachine o-- MachineHooks
+ActivityStateMachine --> Repository : 保存階段
+SubmissionService --> ActivityStateMachine : 讀取 phase
+SubmissionService ..> Submission : creates
+SubmissionService ..> AnswerRules
+SubmissionService ..> AppError : throws
+ResultService --> Repository
+ResultService ..> QuestionResult : creates
+VisibilityFilter ..> ViewInput
+VisibilityFilter ..> StudentView : creates
+DevTeacherRouter --> ActivityStateMachine : 驅動狀態機
+DevTeacherRouter --> Repository : 查詢
+AppError --> ErrorCode
+@enduml

@@ -7,8 +7,10 @@ import { Button } from './components/Button';
 import { ErrorMessage } from './components/ErrorMessage';
 import { Layout } from './components/Layout';
 import { ChangePasswordForm } from './pages/ChangePasswordForm';
+import { DevTeacherPanel } from './pages/DevTeacherPanel';
 import { homePathFor, LoginPage } from './pages/LoginPage';
 import { StudentHome } from './pages/StudentHome';
+import { StudentPage } from './pages/StudentPage';
 import { TeacherDashboard } from './pages/TeacherDashboard';
 import './styles/theme.css';
 
@@ -62,7 +64,7 @@ function NotFound() {
       <p>請確認網址是否正確。</p>
       <a
         href="/"
-        className="flex min-h-11 items-center rounded-md bg-accent px-4 font-medium text-white"
+        className="flex min-h-11 items-center rounded-md bg-primary px-4 font-medium text-white"
       >
         回到首頁
       </a>
@@ -91,6 +93,26 @@ export function AppRoutes() {
           </Guard>
         }
       />
+      <Route
+        path="/student/buzzer"
+        element={
+          <Guard role="STUDENT">
+            <StudentPage />
+          </Guard>
+        }
+      />
+      {import.meta.env.DEV && (
+        <Route
+          path="/dev"
+          element={
+            <Guard role="TEACHER">
+              <Layout title="模擬老師搶答操作（開發工具）">
+                <DevTeacherPanel />
+              </Layout>
+            </Guard>
+          }
+        />
+      )}
       <Route
         path="/account/password"
         element={

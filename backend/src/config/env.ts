@@ -17,8 +17,13 @@ export interface Config {
   /** 閒置逾時（毫秒） */
   sessionIdleTimeout: number;
   databasePath: string;
+  /** 0 表示由系統指定隨機連接埠（整合測試用） */
   port: number;
   nodeEnv: 'development' | 'test' | 'production';
+  /** 允許的前端來源（CORS 與 Socket.IO） */
+  clientOrigin: string;
+  /** 是否掛載模擬老師搶答操作的開發工具（002 FR-022～FR-024） */
+  enableDevTools: boolean;
 }
 
 /** 設定缺漏或格式錯誤。訊息只列變數名稱與規則，不含任何設定值（FR-001）。 */
@@ -67,7 +72,7 @@ const envSchema = z.object({
       .default('teacher'),
   ),
   DATABASE_PATH: optional(z.string().default('./data/app.db')),
-  PORT: optional(intString(1, 65535).default(3000)),
+  PORT: optional(intString(0, 65535).default(3000)),
   SESSION_IDLE_MINUTES: optional(intString(5, 1440).default(120)),
   NODE_ENV: optional(
     z
@@ -75,6 +80,10 @@ const envSchema = z.object({
         error: '須為 development、test 或 production',
       })
       .default('development'),
+  ),
+  CLIENT_ORIGIN: optional(z.string().default('http://localhost:5173')),
+  ENABLE_DEV_TOOLS: optional(
+    z.enum(['true', 'false'], { error: '須為 true 或 false' }).default('false'),
   ),
 });
 
@@ -88,6 +97,9 @@ function load(env: Record<string, string | undefined>): Config {
     throw new ConfigError(problems);
   }
   const e = parsed.data;
+  if (e.NODE_ENV === 'production' && e.ENABLE_DEV_TOOLS === 'true') {
+    throw new ConfigError([{ name: 'ENABLE_DEV_TOOLS', rule: 'production 環境不得啟用開發工具' }]);
+  }
   const databasePath =
     e.DATABASE_PATH === ':memory:' ? ':memory:' : path.resolve(BACKEND_ROOT, e.DATABASE_PATH);
   return {
@@ -99,6 +111,8 @@ function load(env: Record<string, string | undefined>): Config {
     databasePath,
     port: e.PORT,
     nodeEnv: e.NODE_ENV,
+    clientOrigin: e.CLIENT_ORIGIN,
+    enableDevTools: e.ENABLE_DEV_TOOLS === 'true',
   };
 }
 

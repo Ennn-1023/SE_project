@@ -27,7 +27,7 @@ export function Layout({ title, children }: { title: string; children: ReactNode
               </span>
               <Link
                 to="/account/password"
-                className="flex min-h-11 items-center rounded-md px-2 text-sm text-accent underline underline-offset-2"
+                className="flex min-h-11 items-center rounded-md px-2 text-sm text-primary underline underline-offset-2"
               >
                 修改密碼
               </Link>

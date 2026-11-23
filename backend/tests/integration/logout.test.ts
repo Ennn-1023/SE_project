@@ -16,11 +16,11 @@ describe('登出與閒置逾時（US2、FR-022、FR-023）', () => {
       .request()
       .post('/api/auth/login')
       .send({ account: 'S0001', password: t.config.studentDefaultPassword });
-    const loginCookie = String(login.headers['set-cookie'][0]).split(';')[0];
+    const loginCookie = String(login.headers['set-cookie']![0]).split(';')[0]!;
     expect((await t.request().get('/api/auth/me').set('Cookie', loginCookie)).status).toBe(200);
     const res = await t.request().post('/api/auth/logout').set('Cookie', loginCookie);
     expect(res.status).toBe(204);
-    expect(res.headers['set-cookie'][0]).toMatch(/^sid=;/);
+    expect(res.headers['set-cookie']![0]).toMatch(/^sid=;/);
     // 以登出前的 cookie 重放，確認伺服器端已撤銷
     const replay = await t.request().get('/api/auth/me').set('Cookie', loginCookie);
     expect(replay.status).toBe(401);

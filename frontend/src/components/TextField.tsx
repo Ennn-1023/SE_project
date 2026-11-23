@@ -39,7 +39,7 @@ export function TextField({
         aria-invalid={error ? 'true' : 'false'}
         aria-describedby={error ? errorId : undefined}
         onChange={(e) => onChange(e.target.value)}
-        className={`min-h-11 w-full min-w-0 rounded-md border bg-cream-50 px-3 py-2 text-ink focus:outline-2 focus:outline-accent ${
+        className={`min-h-11 w-full min-w-0 rounded-md border bg-cream-50 px-3 py-2 text-ink focus:outline-2 focus:outline-primary ${
           error ? 'border-danger' : 'border-cream-300'
         }`}
       />

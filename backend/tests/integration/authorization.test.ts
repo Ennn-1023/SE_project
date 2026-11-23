@@ -101,7 +101,7 @@ describe('角色權限（US2、FR-021、SC-004）', () => {
   }
 
   it('學生被拒絕時不會產生任何副作用（建立學生）', async () => {
-    await call(student, { ...TEACHER_ENDPOINTS[1], body: { studentId: 'X9999', name: '偷建' } });
+    await call(student, { ...TEACHER_ENDPOINTS[1]!, body: { studentId: 'X9999', name: '偷建' } });
     expect(t.container.repos.users.findStudent('X9999')).toBeNull();
   });
 });

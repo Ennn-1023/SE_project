@@ -1,0 +1,130 @@
+@startuml student-component
+title 學生端搶答系統 — Component Diagram (002-student-buzzer)
+skinparam defaultFontName "Microsoft JhengHei"
+skinparam backgroundColor #FAF7F0
+skinparam componentStyle rectangle
+skinparam component {
+  BackgroundColor #F5F0E6
+  BorderColor #1F3A93
+}
+skinparam package {
+  BorderColor #1F3A93
+}
+
+actor "學生\nStudent" as Student
+actor "老師（開發工具）\nTeacher in dev" as Dev
+
+package "frontend（React + Vite，RWD mobile-first）" {
+  [StudentPage\n依 phase 切換畫面] as Page
+  [WaitingView\n等待老師開放題目] as Waiting
+  [AnsweringView\n題號/題目/本組已送出] as Answering
+  [CountdownTimer\n剩餘時間] as Timer
+  [AnswerInput\n字數/一鍵送出/防連點] as Input
+  [ResultView\n依順位揭曉+本組成敗] as Result
+  [ActivityEndedView\n活動結束提示] as Ended
+  [ConnectionBanner\n斷線提示] as Banner
+  [useStudentState\n狀態合併/時鐘校正] as StateHook
+  [useServerCountdown\n依 endsAt+offset 倒數] as CountHook
+  [api/client\nREST + 錯誤格式] as ApiClient
+  [realtime/socket\n推播接收+自動重連] as RtClient
+  [DesignTokens\n米白底/撞色按鈕] as Tokens
+  [DevTeacherPanel\n模擬老師操作（/dev，需老師登入）] as DevPanel
+  [StudentHome（001）\n已分組 →「進入搶答」] as Home
+  [LoginPage（001）\n學號＋密碼登入] as Login
+}
+
+package "shared（前後端共用）" {
+  [answerRules\n500 字上限/空白驗證] as Rules
+  [errorCodes\n錯誤碼+中文訊息] as Codes
+  [realtime\n重連設定] as RtCfg
+}
+
+package "backend 001（登入、權限、組別；見 001-component）" {
+  [RequireAuth + RequireRole\nsession cookie／角色] as Guard
+  [SessionService\nvalidate／touch] as Sessions
+  [UserRepository\nusers（含 group_number）] as Users
+  [ErrorHandler\n統一錯誤格式（001 與 002 錯誤碼）] as ErrH
+}
+
+package "backend（Express + Socket.IO，server-authoritative）" {
+  [config/env\n環境變數驗證（001 Config）] as Env
+  [StudentRouter\nGET /state、POST /submissions] as StudentApi
+  [AuthMiddleware\nattachStudent／authenticateCookie\n001 session → 學生/目前組別] as Auth
+  [SocketServer\n/student，依學生目前組別產生視角] as Gateway
+  [ActivityStateMachine\n階段/計時器/重啟恢復] as FSM
+  [SubmissionService\n驗證+同步排序（記憶體）] as SubmitSvc
+  [VisibilityFilter\nbuildView：作答中隔離他組] as Filter
+  [ResultService\n結束時以交易寫入] as ResultSvc
+  [Repository\n資料存取（組別、學生讀 001 資料表）] as Repo
+  database "SQLite (node:sqlite)\n001：users / sessions / group_settings\n002：activities / questions /\nsubmissions / question_results" as Store
+}
+
+package "dev only（ENABLE_DEV_TOOLS，正式環境停用）" {
+  [DevTeacherRouter\n開放/時間到/結束/下一題/\n結束活動/重設/結果查詢] as DevTeacher
+  [MockSeed\n活動/題目（F3 前）] as Seed
+}
+
+package "Out of scope（後續功能讀取）" #EEEEEE {
+  [F5/F8 老師端] as Teacher
+  [F10/F11 寫回/匯出] as Export
+}
+
+Student --> Login
+Login --> Home
+Home --> Page : 進入搶答
+Student --> Page
+Page --> Waiting
+Page --> Answering
+Page --> Result
+Page --> Ended
+Page --> Banner
+Page --> StateHook
+Answering --> Timer
+Answering --> Input
+Timer --> CountHook
+Page ..> Tokens
+StateHook --> ApiClient : 取回目前狀態
+StateHook --> RtClient : 訂閱 state:update
+Input --> ApiClient : 送出答案
+Input ..> Rules
+RtClient ..> RtCfg
+Dev --> DevPanel
+DevPanel --> ApiClient
+
+ApiClient --> StudentApi : REST
+ApiClient --> DevTeacher : REST (dev)
+RtClient <--> Gateway : WebSocket／polling（session cookie）
+
+StudentApi --> Guard : 登入＋學生角色
+DevTeacher --> Guard : 登入＋老師角色
+Guard --> Sessions
+Guard --> Users
+StudentApi --> Auth
+Gateway --> Auth : handshake cookie
+Auth --> Sessions
+Auth --> Repo : getStudent（目前組別）
+StudentApi --> SubmitSvc : submit
+StudentApi --> Gateway : pushToTeam
+StudentApi --> Filter : viewFor
+Gateway --> Filter : viewFor（每個連線依目前組別各自產生）
+SubmitSvc --> FSM : 檢查 phase
+SubmitSvc ..> Rules
+FSM --> ResultSvc : 題目結束（onQuestionClosed）
+FSM --> Gateway : 階段變化（onChange → pushAll）
+FSM --> Repo : 保存階段
+ResultSvc --> Repo : submissions + result（單一交易）
+Filter ..> Repo : 題目/組別/已結束的送出
+Repo --> Store
+Users --> Store
+Sessions --> Store
+StudentApi ..> ErrH
+ErrH ..> Codes
+Env ..> FSM : 啟動設定
+
+DevTeacher --> FSM : 模擬老師操作
+DevTeacher --> Repo : 結果/送出查詢
+Seed --> Repo : 寫入 mock 活動與題目
+
+Teacher ..> Store : 讀取
+Export ..> Store : 讀取
+@enduml

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { api, ApiError, type MyGroupView } from '../api/apiClient';
 import { useAuth } from '../auth/AuthContext';
 import { Button } from '../components/Button';
@@ -70,7 +71,16 @@ export function StudentHome() {
         {view === null ? (
           <p>載入中…</p>
         ) : view.groupNumber !== null ? (
-          <p className="text-2xl font-bold text-accent">你在第 {view.groupNumber} 組</p>
+          <>
+            <p className="text-2xl font-bold text-primary">你在第 {view.groupNumber} 組</p>
+            {/* 已分組才能以組別參與搶答（002 FR-006） */}
+            <Link
+              to="/student/buzzer"
+              className="flex min-h-11 items-center justify-center rounded-md bg-primary px-4 font-medium text-white self-start"
+            >
+              進入搶答
+            </Link>
+          </>
         ) : view.groupCount === 0 ? (
           <p className="text-lg font-medium">老師尚未開放分組</p>
         ) : (

@@ -1,4 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
+import { AppError as BuzzerAppError } from '../http/errors.js';
+import { toErrorBody } from '../http/middleware/errorHandler.js';
 import { AppError, ErrorCodes, INTERNAL_ERROR_MESSAGE } from '../lib/errors.js';
 import type { Logger } from '../lib/logger.js';
 
@@ -8,6 +10,12 @@ export function errorHandler(logger: Logger) {
   return (err: unknown, req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof AppError) {
       res.status(err.status).json(err.toBody());
+      return;
+    }
+    if (err instanceof BuzzerAppError) {
+      // 搶答（002）錯誤碼由 shared 的錯誤碼表產生訊息與修正提示
+      const { status, body } = toErrorBody(err.code, err.field, err.params);
+      res.status(status).json(body);
       return;
     }
     const e = err as { type?: string; status?: number };

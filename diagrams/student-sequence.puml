@@ -1,0 +1,118 @@
+@startuml student-sequence
+title 學生端搶答系統 — Sequence Diagram (002-student-buzzer)
+skinparam defaultFontName "Microsoft JhengHei"
+skinparam backgroundColor #FAF7F0
+skinparam sequence {
+  ParticipantBackgroundColor #F5F0E6
+  ParticipantBorderColor #1F3A93
+  ArrowColor #1F3A93
+  LifeLineBorderColor #1F3A93
+}
+autonumber
+
+actor "A 組代表\n(分頁一)" as S1
+actor "A 組代表\n(分頁二)" as S2
+actor "B 組代表" as S3
+participant "Student Client" as C
+participant "StudentRouter\n(REST)" as API
+participant "SocketServer\n+ buildView" as GW
+participant "SubmissionService\n(記憶體)" as SS
+participant "ActivityStateMachine" as FSM
+participant "ResultService" as RS
+database "Repository\n(SQLite)" as DB
+actor "DevTeacherRouter\n(dev only)" as T
+
+note over S1, T : 學生以 001 帳號登入（session cookie），在學生首頁已分組後按「進入搶答」。\n預設每組 1 位同學登入（A 組代表開兩個分頁示範同組同步）。\nDevTeacherRouter 需以老師身分登入（RequireAuth + RequireRole TEACHER）。
+
+== 等待開放 ==
+S1 -> C : 開啟搶答頁
+C -> API : GET /api/student/state（session cookie）
+API -> API : RequireAuth + RequireRole(STUDENT)\n→ attachStudent：查出學生目前組別
+API --> C : StudentView {phase=WAITING}
+C -> GW : 連線（handshake 帶 session cookie）
+GW --> C : state:update（目前狀態）
+C --> S1 : 「等待老師開放題目」
+
+== 作答中 ==
+T -> FSM : open(Q1, 60)
+FSM -> SS : onQuestionOpened → startQuestion(Q1)
+FSM -> DB : saveActivity(ANSWERING, endsAt)
+FSM -> FSM : setTimeout(60s)
+FSM -> GW : onChange → pushAll()
+GW --> C : 每個連線依學生目前組別各自 buildView\n{phase, question, endsAt, serverNow}(不含他組資料)
+C --> S1 : 題號/題目/作答區/依 endsAt 倒數
+C --> S2 : 同上
+C --> S3 : 同上
+
+S3 -> C : 送出答案 "B 的答案"
+C -> API : POST /submissions {Q1, answer}
+API -> SS : submit(student, Q1, answer)
+SS -> SS : validateAnswer：非空、最多 500 字
+SS -> FSM : 讀取 activity（ANSWERING 且為 Q1？）
+SS -> SS : 同步寫入 Map(B 組, receivedAt, rank=1)
+SS --> API : Submission
+API -> GW : pushToTeam(B 組)
+GW --> C : 僅目前屬於 B 組的連線：myTeamSubmission
+API --> C : 201 {questionId, teamId, answer}（不含 rank）
+
+S1 -> C : 送出答案 "A 的答案"
+C -> API : POST /submissions
+API -> SS : submit → Map(A 組, rank=2)
+API -> GW : pushToTeam(A 組)
+GW --> C : 僅目前屬於 A 組的連線：「本組已送出」
+C --> S2 : 「本組已送出」(作答區停用)
+
+S2 -> C : 再次送出(多分頁)
+C -> API : POST /submissions
+API -> SS : submit
+SS --> API : AppError ALREADY_SUBMITTED
+API --> C : 409「本組已送出過此題答案」
+
+group 重新整理 / 斷線重連
+  S2 -> C : 重新整理頁面
+  C -> API : GET /api/student/state
+  API --> C : {ANSWERING, Q1, endsAt, myTeamSubmission}(過濾他組)
+  C -> GW : 重新連線
+  GW --> C : state:update（同上）
+  C --> S2 : 回到作答中，顯示「本組已送出」
+end
+
+== 已結束 ==
+alt 倒數時間到
+  FSM -> FSM : 計時器觸發 closeQuestion(TIME_UP)
+else 手動結束
+  T -> FSM : manualClose()
+end
+FSM -> RS : onQuestionClosed(Q1, reason)
+RS -> SS : all()（依 rank）
+RS -> DB : saveQuestionOutcome\n(submissions + QuestionResult，單一交易)
+FSM -> DB : saveActivity(CLOSED)（只結束一次）
+FSM -> GW : onChange → pushAll()
+GW -> DB : listSubmissions(Q1)
+GW --> C : {CLOSED, results: 順位/組名/答案, myTeamOutcome}\n(不含送出時間與送出者)
+C --> S3 : 結果列表 +「本組搶答成功」
+C --> S1 : 結果列表 +「本組未成功」
+
+S1 -> C : 結束後送出
+C -> API : POST /submissions
+API -> SS : submit
+SS --> API : AppError QUESTION_CLOSED
+API --> C : 409「本題搶答已結束，無法再送出答案」
+
+group 例外流程：伺服器在作答中重啟
+  note over SS : 作答中的送出只在記憶體，隨行程結束而消失
+  FSM -> DB : 啟動時 recoverAfterRestart()：\n讀到 ANSWERING → 改存 WAITING
+  C -> GW : 自動重連
+  GW --> C : state:update {WAITING}「等待老師開放題目」
+end
+
+== 下一題 / 活動結束 ==
+T -> FSM : next()
+FSM -> DB : saveActivity(WAITING)
+FSM -> GW : pushAll()
+GW --> C : 「等待老師開放題目」(換題時清除上一題狀態)
+T -> FSM : end()
+FSM -> DB : saveActivity(ENDED)
+FSM -> GW : pushAll()
+GW --> C : 「活動已結束，感謝參與」
+@enduml

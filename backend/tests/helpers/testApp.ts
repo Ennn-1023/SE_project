@@ -17,6 +17,8 @@ export const TEST_CONFIG: Config = {
   databasePath: ':memory:',
   port: 0,
   nodeEnv: 'test',
+  clientOrigin: 'http://localhost:5173',
+  enableDevTools: false,
 };
 
 /** 測試用較低成本的 scrypt 參數；併發測試（T079）另以正式參數執行。 */

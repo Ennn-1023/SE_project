@@ -10,7 +10,12 @@ import type { Database } from './lib/db.js';
 import { transaction } from './lib/db.js';
 import { createLogger, type Logger } from './lib/logger.js';
 import { PasswordHasher } from './lib/password.js';
+import type { AppContext } from './context.js';
+import { devResultsRouter, devTeacherRouter } from './http/routes/devTeacher.js';
+import { studentRouter } from './http/routes/student.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { requireAuth } from './middleware/requireAuth.js';
+import { requireRole } from './middleware/requireRole.js';
 import { requireJson } from './middleware/validate.js';
 import { authRoutes } from './routes/authRoutes.js';
 import { groupRoutes } from './routes/groupRoutes.js';
@@ -63,8 +68,15 @@ export function createContainer(deps: AppDeps) {
 
 export type Container = ReturnType<typeof createContainer>;
 
-export function createApp(deps: AppDeps) {
-  const container = createContainer(deps);
+export interface CreateAppOptions extends AppDeps {
+  /** 已組裝的容器（server.ts 先建立容器以供 Socket.IO 驗證共用） */
+  container?: Container;
+  /** 搶答（002）的執行環境；提供時掛載 /api/student 與（啟用時）/api/dev */
+  buzzer?: AppContext;
+}
+
+export function createApp(deps: CreateAppOptions) {
+  const container = deps.container ?? createContainer(deps);
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', false);
@@ -88,6 +100,16 @@ export function createApp(deps: AppDeps) {
     '/groups',
     groupRoutes({ groups: services.groups, sessions: services.sessions, users: repos.users }),
   );
+  if (deps.buzzer) {
+    const auth = requireAuth(services.sessions, repos.users);
+    // 學生搶答 API：以 001 的 session 登入，只限學生
+    api.use('/student', auth, requireRole('STUDENT'), studentRouter(deps.buzzer));
+    if (config.enableDevTools) {
+      // 模擬老師搶答操作（002 FR-022～FR-024），整合後須以老師身分登入
+      api.use('/dev/teacher', auth, requireRole('TEACHER'), devTeacherRouter(deps.buzzer));
+      api.use('/dev', auth, requireRole('TEACHER'), devResultsRouter(deps.buzzer));
+    }
+  }
   api.use(notFoundHandler);
 
   app.use('/api', api);

@@ -110,7 +110,8 @@ describe('一致外觀與跨裝置可用（US6、FR-003、FR-004）', () => {
 
   it('原始碼不得出現硬編碼色碼（一律使用 theme.css token）', () => {
     for (const file of sourceFiles(SRC)) {
-      if (file.endsWith('theme.css')) continue;
+      // 只有 token 定義檔可以寫色碼（theme.css：Tailwind @theme；tokens.css：002 搶答頁的 CSS 變數）
+      if (file.endsWith('theme.css') || file.endsWith('tokens.css')) continue;
       const text = fs.readFileSync(file, 'utf8');
       expect(text, path.relative(SRC, file)).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgb\(|hsl\(/);
     }
@@ -119,6 +120,8 @@ describe('一致外觀與跨裝置可用（US6、FR-003、FR-004）', () => {
   it('錯誤訊息只由 ErrorMessage 元件呈現（role="alert" 不出現在其他檔案）', () => {
     for (const file of sourceFiles(SRC)) {
       if (file.endsWith(`components${path.sep}ErrorMessage.tsx`)) continue;
+      // 連線狀態橫幅是即時狀態通知，不是操作錯誤訊息（002 FR-005）
+      if (file.endsWith(`components${path.sep}ConnectionBanner.tsx`)) continue;
       const text = fs.readFileSync(file, 'utf8');
       expect(text, path.relative(SRC, file)).not.toContain('role="alert"');
     }

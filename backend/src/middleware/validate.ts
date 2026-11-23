@@ -20,7 +20,7 @@ export const fieldError = (required: string, invalid: string = required) => ({
 });
 
 export function issueToAppError(issue: ZodIssue): AppError {
-  const [message, hint] = issue.message.split(HINT_SEPARATOR);
+  const [message = issue.message, hint] = issue.message.split(HINT_SEPARATOR);
   const field = issue.path.length > 0 ? issue.path.map(String).join('.') : undefined;
   return new AppError(ErrorCodes.VALIDATION_ERROR, message, { field, hint });
 }
@@ -46,12 +46,12 @@ export function validate(schemas: ValidateSchemas) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (schemas.params) {
       const parsed = schemas.params.safeParse(req.params);
-      if (!parsed.success) return next(fail(parsed.error.issues[0]));
+      if (!parsed.success) return next(fail(parsed.error.issues[0]!));
       req.params = parsed.data as Request['params'];
     }
     if (schemas.body) {
       const parsed = schemas.body.safeParse(req.body ?? {});
-      if (!parsed.success) return next(fail(parsed.error.issues[0]));
+      if (!parsed.success) return next(fail(parsed.error.issues[0]!));
       req.body = parsed.data;
     }
     next();

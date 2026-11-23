@@ -42,7 +42,7 @@ export class PasswordHasher implements PasswordHasherPort {
   async verify(plain: string, stored: string): Promise<boolean> {
     const parts = stored.split('$');
     if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
-    const [, n, r, p, saltB64, hashB64] = parts;
+    const [, n, r, p, saltB64 = '', hashB64 = ''] = parts;
     const expected = Buffer.from(hashB64, 'base64');
     const actual = await scrypt(plain, Buffer.from(saltB64, 'base64'), expected.length, {
       N: Number(n),

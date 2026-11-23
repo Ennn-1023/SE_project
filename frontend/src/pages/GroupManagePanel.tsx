@@ -193,7 +193,7 @@ export function GroupManagePanel({
               )}
             </div>
           ))}
-          <div className="rounded-lg border border-accent-2 bg-cream-50 p-3 lg:col-span-2">
+          <div className="rounded-lg border border-accent bg-cream-50 p-3 lg:col-span-2">
             <h4 className="mb-2 font-bold">未分組（{data.unassigned.length} 人）</h4>
             {data.unassigned.length === 0 ? (
               <p className="text-sm">所有學生都已分組</p>

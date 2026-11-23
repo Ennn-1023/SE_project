@@ -23,7 +23,11 @@ declare global {
 
 /** 從 Cookie 標頭讀出指定名稱的值。 */
 export function readCookie(req: Request, name: string): string | undefined {
-  const header = req.headers.cookie;
+  return cookieValue(req.headers.cookie, name);
+}
+
+/** 解析 Cookie 標頭字串（REST 與 Socket.IO 握手共用）。 */
+export function cookieValue(header: string | undefined, name: string): string | undefined {
   if (!header) return undefined;
   for (const part of header.split(';')) {
     const idx = part.indexOf('=');

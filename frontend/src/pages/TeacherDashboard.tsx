@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { Layout } from '../components/Layout';
 import { GroupManagePanel } from './GroupManagePanel';
 import { StudentCreatePanel } from './StudentCreatePanel';
@@ -18,6 +19,14 @@ export function TeacherDashboard() {
           refreshKey={studentsVersion}
           onChanged={() => setGroupsVersion((v) => v + 1)}
         />
+        {import.meta.env.DEV && (
+          <Link
+            to="/dev"
+            className="flex min-h-11 items-center justify-center rounded-md bg-primary px-4 font-medium text-white self-start"
+          >
+            模擬老師搶答操作（開發工具）
+          </Link>
+        )}
       </div>
     </Layout>
   );

@@ -10,8 +10,8 @@ const TOKENS: Record<string, string> = {
   '--color-cream-100': '#f5f0e6',
   '--color-cream-300': '#e6dcc8',
   '--color-ink': '#2b2a28',
-  '--color-accent': '#1f3a93',
-  '--color-accent-2': '#ff6b4a',
+  '--color-primary': '#1f3a93',
+  '--color-accent': '#ff6b4a',
   '--color-danger': '#b42318',
 };
 
@@ -24,7 +24,7 @@ describe('UI 風格系統 theme.css（US6、FR-003）', () => {
   it.each(Object.entries(TOKENS))('%s = %s', (token, value) => {
     const match = css.match(new RegExp(`${token}:\\s*(#[0-9a-fA-F]{6})\\s*;`));
     expect(match, `${token} 未定義`).not.toBeNull();
-    expect(match![1].toLowerCase()).toBe(value);
+    expect(match![1]!.toLowerCase()).toBe(value);
   });
 
   it('body 使用米白背景與主要文字色', () => {

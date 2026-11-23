@@ -44,6 +44,54 @@ const MIGRATIONS: { version: number; up: (db: Database, now: string) => void }[]
       );
     },
   },
+  {
+    // 002-student-buzzer 的資料表（specs/002-student-buzzer/data-model.md）。
+    // 組別與學生直接使用 users.group_number 與 users（整合後不另建 teams／students 表），
+    // 因此 team_id／student_id 不設外鍵；team_id 為 `T{組別編號}`。
+    version: 2,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE activities (
+          id                  TEXT PRIMARY KEY,
+          phase               TEXT NOT NULL CHECK (phase IN ('WAITING','ANSWERING','CLOSED','ENDED')),
+          current_question_id TEXT,
+          ends_at             INTEGER,
+          updated_at          INTEGER NOT NULL
+        );
+
+        CREATE TABLE questions (
+          question_id TEXT PRIMARY KEY,
+          activity_id TEXT NOT NULL REFERENCES activities(id),
+          number      INTEGER NOT NULL CHECK (number >= 1),
+          text        TEXT NOT NULL CHECK (length(text) > 0),
+          UNIQUE (activity_id, number)
+        );
+
+        CREATE TABLE submissions (
+          activity_id TEXT NOT NULL,
+          question_id TEXT NOT NULL REFERENCES questions(question_id),
+          team_id     TEXT NOT NULL,
+          student_id  TEXT NOT NULL,
+          answer      TEXT NOT NULL CHECK (length(answer) > 0),
+          received_at INTEGER NOT NULL,
+          rank        INTEGER NOT NULL CHECK (rank >= 1),
+          PRIMARY KEY (activity_id, question_id, team_id),
+          UNIQUE (activity_id, question_id, rank)
+        );
+
+        CREATE TABLE question_results (
+          activity_id   TEXT NOT NULL,
+          question_id   TEXT NOT NULL REFERENCES questions(question_id),
+          answer        TEXT,
+          winner_team   TEXT,
+          submitted_at  INTEGER,
+          closed_reason TEXT NOT NULL CHECK (closed_reason IN ('TIME_UP','MANUAL','ACTIVITY_ENDED')),
+          closed_at     INTEGER NOT NULL,
+          PRIMARY KEY (activity_id, question_id)
+        );
+      `);
+    },
+  },
 ];
 
 export function migrate(db: Database, now: Date = new Date()): number[] {

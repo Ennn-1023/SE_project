@@ -4,8 +4,8 @@ import type { ButtonHTMLAttributes } from 'react';
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
-  primary: 'bg-accent text-white hover:bg-accent/90',
-  secondary: 'bg-accent-2 text-ink hover:bg-accent-2/90',
+  primary: 'bg-primary text-white hover:bg-primary/90',
+  secondary: 'bg-accent text-ink hover:bg-accent/90',
   ghost: 'border border-cream-300 bg-cream-100 text-ink hover:bg-cream-300',
 };
 
@@ -23,7 +23,7 @@ export function Button({
     <button
       type={type}
       data-variant={variant}
-      className={`min-h-11 min-w-11 rounded-md px-4 py-2 font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT_CLASS[variant]} ${className}`}
+      className={`min-h-11 min-w-11 rounded-md px-4 py-2 font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT_CLASS[variant]} ${className}`}
       {...rest}
     />
   );

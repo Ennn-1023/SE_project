@@ -1,9 +1,10 @@
 {
   "name": "se-project",
   "private": true,
-  "description": "課程搶答系統（F0/F1/F2：基礎建設、登入權限與組別管理）",
+  "description": "課程搶答系統（F0/F1/F2 基礎建設、登入權限與組別管理；F6/F7/F9 學生搶答）",
   "type": "module",
   "workspaces": [
+    "shared",
     "backend",
     "frontend"
   ],
@@ -11,19 +12,23 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "concurrently -n backend,frontend -c blue,magenta \"npm run dev --workspace backend\" \"npm run dev --workspace frontend\"",
-    "test": "npm test --workspace backend && npm test --workspace frontend",
+    "dev": "concurrently -n backend,frontend -c blue,magenta \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "test": "npm run test -w shared && npm run test -w backend && npm run test -w frontend",
     "lint": "eslint .",
-    "typecheck": "npm run typecheck --workspace backend && npm run typecheck --workspace frontend",
+    "typecheck": "npm run typecheck -w shared && npm run typecheck -w backend && npm run typecheck -w frontend",
     "format": "prettier --write ."
   },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@eslint/js": "^9.39.5",
     "concurrently": "^10.0.7",
-    "eslint": "^10.15.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
     "globals": "^17.14.0",
     "prettier": "^3.10.1",
-    "typescript": "^5.9.3",
+    "typescript": "~6.0",
     "typescript-eslint": "^8.73.0"
   }
 }

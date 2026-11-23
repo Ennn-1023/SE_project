@@ -17,7 +17,7 @@ describe('POST /api/auth/login（US1、FR-017～FR-019）', () => {
     const res = await login(t.config.teacherAccount, t.config.teacherInitialPassword);
     expect(res.status).toBe(200);
     expect(res.body.user).toMatchObject({ account: 'TEACHER', role: 'TEACHER' });
-    const cookie = res.headers['set-cookie'][0];
+    const cookie = res.headers['set-cookie']![0]!;
     expect(cookie).toMatch(/^sid=[^;]+;/);
     expect(cookie).toMatch(/HttpOnly/i);
     expect(cookie).toMatch(/SameSite=Lax/i);
@@ -140,6 +140,6 @@ describe('GET /api/auth/me', () => {
       .request()
       .post('/api/auth/login')
       .send({ account: t.config.teacherAccount, password: t.config.teacherInitialPassword });
-    expect(res.headers['set-cookie'][0]).toMatch(/Secure/i);
+    expect(res.headers['set-cookie']![0]).toMatch(/Secure/i);
   });
 });

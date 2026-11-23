@@ -34,8 +34,8 @@ describe('Button', () => {
       expect(b.className).toContain('min-h-11');
       expect(b.className).toContain('min-w-11');
     }
-    expect(primary.className).toContain('bg-accent ');
-    expect(secondary.className).toContain('bg-accent-2');
+    expect(primary.className).toContain('bg-primary ');
+    expect(secondary.className).toContain('bg-accent');
     expect(primary).toHaveAttribute('type', 'button');
   });
 });

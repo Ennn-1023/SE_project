@@ -47,8 +47,8 @@ describe('SessionService', () => {
     const { token } = service.create(userId);
     const rows = db.prepare('SELECT id FROM sessions').all() as { id: string }[];
     expect(rows).toHaveLength(1);
-    expect(rows[0].id).not.toBe(token);
-    expect(rows[0].id).toMatch(/^[0-9a-f]{64}$/);
+    expect(rows[0]!.id).not.toBe(token);
+    expect(rows[0]!.id).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('撤銷後回 UNAUTHENTICATED（邊界）', () => {

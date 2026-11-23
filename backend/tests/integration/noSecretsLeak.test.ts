@@ -14,7 +14,7 @@ describe('機敏資料不外洩（SC-008、FR-020、憲章原則 III）', () => 
       bodies.push(res.text ?? '');
       const cookies = (res.headers['set-cookie'] as string[] | undefined) ?? [];
       for (const c of cookies) {
-        const value = c.split(';')[0].split('=')[1];
+        const value = c.split(';')[0]!.split('=')[1];
         if (value) tokens.push(value);
       }
       return res;

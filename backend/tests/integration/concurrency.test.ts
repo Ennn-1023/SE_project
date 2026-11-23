@@ -39,7 +39,7 @@ describe('併發：60 位學生同時登入與選組（SC-007、FR-035、FR-037�
   const login = (account: string, password: string) =>
     timed('/auth/login', { method: 'POST', body: JSON.stringify({ account, password }) });
 
-  const cookieOf = (res: Response) => res.headers.get('set-cookie')!.split(';')[0];
+  const cookieOf = (res: Response) => res.headers.get('set-cookie')!.split(';')[0]!;
 
   it('60 人同時登入後同時選組：每個請求 ≤ 3 秒，每人恰屬一組', async () => {
     const logins = await Promise.all(ids.map((id) => login(id, t.config.studentDefaultPassword)));
@@ -75,7 +75,7 @@ describe('併發：60 位學生同時登入與選組（SC-007、FR-035、FR-037�
   it('同時送出學生自選與老師指派（重複多輪）：最終一律為老師指派的組別，無錯誤狀態', async () => {
     const teacher = await login(t.config.teacherAccount, t.config.teacherInitialPassword);
     const teacherCookie = cookieOf(teacher.res);
-    const id = ids[0];
+    const id = ids[0]!;
     const student = await login(id, t.config.studentDefaultPassword);
     const studentCookie = cookieOf(student.res);
 

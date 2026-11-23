@@ -232,6 +232,10 @@ Phase 1 產出（data-model、contracts、quickstart）完成後重新檢查上�
 | 登入只驗證必填（不驗學號格式） | 老師帳號不是學號格式 | 001-sequence-login |
 | 新增 `frontend/src/components/TextField.tsx` | 表單欄位與錯誤訊息的共用元件 | （列入基礎設施允許清單） |
 | zod 升級為 4（`^4.6.7`）：缺漏／型別錯誤訊息改用 `fieldError()` 產生的 `error` 參數；設定預設值改為輸出型別（數字） | 與 main 分支（002-student-buzzer）使用相同主版本，降低合併衝突 | （不影響設計圖） |
+| 整合 main 的 002 學生搶答：搶答以 001 session 驗證（`attachStudent`、socket `authenticateCookie`），組別即 `users.group_number`（`T{n}`） | 002 原以 dev mock 登入與獨立的 teams／students 表運作，需改用正式登入與組別 | student-component、student-class、student-sequence（詳見 002 plan.md「與 001 的整合」） |
+| `Config` 新增 `clientOrigin`、`enableDevTools`；`PORT` 允許 0（隨機，整合測試用）；migration version 2 建立搶答資料表 | 002 的設定與資料表併入 001 的設定與 migration | （Config 欄位不在類別圖列出；不影響 001 圖） |
+| `requireAuth.ts` 新增 `cookieValue()`；`ErrorHandler` 一併處理搶答錯誤碼 | Socket.IO 握手與 REST 共用 cookie 解析與錯誤格式 | （不影響 001 圖） |
+| Tailwind token 改名：`accent`→`primary`（深藍）、`accent-2`→`accent`（珊瑚橘） | 與 002 的 tokens.css 同名同值，避免同名變數互相覆蓋 | （不影響設計圖） |
 | 登入第 5 次失敗時，`AuthService` 以 `findById` 重新讀取 `lockedUntil`，立即回 423 | FR-019「第 5 次起告知剩餘等待時間」；T083 §8 比對時發現圖上只畫 401 | 001-sequence-login |
 
 ## Complexity Tracking

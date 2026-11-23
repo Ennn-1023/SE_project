@@ -122,7 +122,7 @@ export function StudentCreatePanel({
         {success ? (
           <p
             role="status"
-            className="rounded-md border border-accent/30 bg-cream-50 px-3 py-2 font-medium text-accent"
+            className="rounded-md border border-primary/30 bg-cream-50 px-3 py-2 font-medium text-primary"
           >
             {success}
           </p>
