@@ -12,6 +12,8 @@ import { LoginPage } from '../src/pages/LoginPage';
 import { StudentCreatePanel } from '../src/pages/StudentCreatePanel';
 import { StudentHome } from '../src/pages/StudentHome';
 import { TeacherDashboard } from '../src/pages/TeacherDashboard';
+import { QuestionManagePage } from '../src/pages/QuestionManagePage';
+import { draftView } from './questionFixtures';
 import { mockMe, teacherUser } from './utils';
 
 const SRC = path.resolve(__dirname, '../src');
@@ -125,5 +127,49 @@ describe('一致外觀與跨裝置可用（US6、FR-003、FR-004）', () => {
       const text = fs.readFileSync(file, 'utf8');
       expect(text, path.relative(SRC, file)).not.toContain('role="alert"');
     }
+  });
+});
+
+describe('題目管理頁的 RWD（003 FR-034、SC-010）', () => {
+  async function renderQuestionPage() {
+    vi.spyOn(api, 'getGoogleStatus').mockResolvedValue({
+      configured: true,
+      connected: true,
+      googleEmail: 't@example.edu',
+    });
+    vi.spyOn(api, 'getCurrentDraft').mockResolvedValue({ draft: draftView() });
+    vi.spyOn(api, 'getQuestionSet').mockResolvedValue({ questionSet: null });
+    const result = await renderPage(<QuestionManagePage />, true);
+    await screen.findByRole('grid', { name: '學習單格子' });
+    return result;
+  }
+
+  it('按鈕與下拉選單觸控區 ≥ 44px（學習單格子另以縮放控制）', async () => {
+    const { container } = await renderQuestionPage();
+    const controls = [...container.querySelectorAll('button, select')].filter(
+      (c) => c.getAttribute('role') !== 'gridcell',
+    );
+    expect(controls.length).toBeGreaterThan(3);
+    for (const c of controls) expect(c.className, c.outerHTML.slice(0, 80)).toContain('min-h-11');
+  });
+
+  it('學習單格子在自己的區塊內捲動；頁面元素不設定固定像素寬度', async () => {
+    const { container } = await renderQuestionPage();
+    const scroll = screen.getByTestId('sheet-grid-scroll');
+    expect(scroll.className).toContain('overflow-auto');
+    expect(scroll.className).toContain('max-w-full');
+    for (const node of container.querySelectorAll<HTMLElement>('*')) {
+      expect(node.className.toString()).not.toMatch(/(^|\s)(min-)?w-\[\d+px\]/);
+      expect(node.style.width).toBe('');
+    }
+  });
+
+  it('手機（< 640px）時標註面板為底部面板，平板以上回到版面中', async () => {
+    await renderQuestionPage();
+    const panel = screen.getByTestId('annotation-panel');
+    for (const cls of ['fixed', 'bottom-0', 'inset-x-0', 'sm:static']) {
+      expect(panel.className).toContain(cls);
+    }
+    expect(within(panel).getByRole('button', { name: '收合' })).toBeInTheDocument();
   });
 });

@@ -1,0 +1,98 @@
+@startuml 003-sequence-connect
+title 時序圖：連結 Google 帳號（OAuth 授權碼＋PKCE）
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+autonumber
+
+actor "老師" as T
+participant "GoogleConnectionPanel" as GP
+participant "ApiClient" as API
+participant "GoogleRoutes" as R
+participant "RequireAuth/\nRequireRole" as MW
+participant "GoogleAuthService" as GA
+participant "OAuthStateRepository" as SR
+participant "GoogleOAuthClient" as OC
+participant "TokenCipher" as TC
+participant "GoogleConnectionRepository" as CR
+participant "QuestionEventRepository" as ER
+participant "Google OAuth" as G
+
+T -> GP : 按「連結 Google 帳號」
+GP -> API : startGoogleAuth()
+API -> R : POST /google/oauth/start
+R -> MW : 檢查登入與 TEACHER
+alt 未登入或學生
+  MW --> R : AppError(401 / 403「權限不足」)
+  R --> API : 錯誤
+else 老師
+  R -> GA : startAuthorization(userId, sessionId)
+  alt 未設定 GOOGLE_* 憑證
+    GA --> R : AppError(503 GOOGLE_NOT_CONFIGURED)
+    R --> API : 503
+    API --> GP : 顯示「系統尚未設定 Google 試算表串接」
+  else 已設定
+    GA -> SR : deleteExpired(now)
+    GA -> TC : encrypt(codeVerifier)
+    GA -> SR : create(state, userId, sessionId, verifierEnc, +10 分鐘)
+    GA -> OC : buildAuthUrl(state, codeChallenge)
+    OC --> GA : authUrl
+    GA --> R : authUrl
+    R --> API : 200 { authUrl }
+    API --> GP : authUrl
+    GP -> T : 瀏覽器前往 Google 授權頁
+  end
+end
+
+T -> G : 登入 Google 並同意（或取消）
+G -> R : 302 → GET /google/oauth/callback?state&code|error
+note right of R
+  回呼不掛 RequireAuth：以 cookie 的 sid 經
+  SessionService.validate 取得 session，且使用者須為老師；
+  否則 sessionId = null（→ state_invalid）
+end note
+R -> GA : handleCallback(params, 目前 sessionId)
+GA -> SR : take(state)
+SR --> GA : OAuthState?
+alt state 不存在／過期／session 不符
+  GA --> R : result = state_invalid
+else 老師取消（error=access_denied）
+  GA --> R : result = denied
+else 取得 code
+  GA -> TC : decrypt(codeVerifierEnc)
+  GA -> OC : exchangeCode(code, verifier)
+  alt 交換失敗／逾時
+    OC --> GA : 錯誤
+    GA --> R : result = error
+  else 成功
+    OC --> GA : TokenSet(access, refresh, scope, expiresIn)
+    alt scope 不含 spreadsheets
+      GA -> OC : revoke(access)
+      GA --> R : result = scope_missing
+    else
+      GA -> OC : fetchEmail(access)
+      OC --> GA : googleEmail
+      GA -> TC : encrypt(refresh)、encrypt(access)
+      GA -> CR : upsert(connection)
+      GA -> ER : record(GOOGLE_CONNECTED)
+      GA --> R : result = connected
+    end
+  end
+end
+R --> T : 302 /teacher/questions?google=<result>
+T -> GP : 顯示結果（不含任何 token）
+
+== 中斷連結 ==
+T -> GP : 按「中斷 Google 連結」並確認
+GP -> API : disconnectGoogle()
+API -> R : DELETE /google/connection
+R -> GA : disconnect(userId)
+GA -> CR : findByUser(userId)
+GA -> TC : decrypt(refreshTokenEnc)
+GA -> OC : revoke(refresh)
+note right : 撤銷失敗只寫 log（遮罩），不阻擋
+GA -> CR : delete(userId)
+GA -> ER : record(GOOGLE_DISCONNECTED)
+R --> API : 204
+API --> GP : 顯示「未連結」（題目集保留）
+@enduml

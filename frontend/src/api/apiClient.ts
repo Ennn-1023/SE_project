@@ -1,4 +1,44 @@
 /** ApiClient（組件圖）：集中處理 fetch、JSON 與一致錯誤格式（contracts/openapi.yaml）。 */
+import type {
+  AnnotationDocument,
+  GridSnapshot,
+  QuestionSetView,
+  SheetSource,
+  SheetTab,
+  ValidationResult,
+} from '@buzzer/shared';
+
+// ---------- 003 題目匯入（specs/003-sheets-question-import/contracts/openapi.yaml） ----------
+
+export interface GoogleStatus {
+  configured: boolean;
+  connected: boolean;
+  googleEmail?: string;
+}
+
+export interface ImportDraftView {
+  id: string;
+  revision: number;
+  expiresAt: string;
+  source: SheetSource;
+  sheets: SheetTab[];
+  grid: GridSnapshot;
+  annotations: AnnotationDocument;
+  restoredCount: number;
+  validation: ValidationResult;
+}
+
+export interface SaveAnnotationsResult {
+  revision: number;
+  annotations: AnnotationDocument;
+  validation: ValidationResult;
+  expiresAt: string;
+}
+
+export interface PreviewResult {
+  preview: QuestionSetView;
+  replaces: { spreadsheetTitle: string; sheetTitle: string; questionCount: number } | null;
+}
 
 export type Role = 'TEACHER' | 'STUDENT';
 
@@ -107,6 +147,7 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
     get: <T>(path: string) => request<T>('GET', path),
     post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
     put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
+    del: <T>(path: string) => request<T>('DELETE', path),
   };
 }
 
@@ -140,4 +181,33 @@ export const api = {
         groupNumber,
       },
     ),
+  // 003：Google 連結
+  getGoogleStatus: () => client.get<GoogleStatus>('/google/status'),
+  startGoogleAuth: () => client.post<{ authUrl: string }>('/google/oauth/start'),
+  disconnectGoogle: () => client.del<void>('/google/connection'),
+  // 003：學習單匯入
+  createDraft: (link: string, sheetId?: number) =>
+    client.post<{ draft: ImportDraftView }>(
+      '/question-import/drafts',
+      sheetId === undefined ? { link } : { link, sheetId },
+    ),
+  getCurrentDraft: () =>
+    client.get<{ draft: ImportDraftView | null }>('/question-import/drafts/current'),
+  saveAnnotations: (draftId: string, revision: number, annotations: AnnotationDocument) =>
+    client.put<SaveAnnotationsResult>(
+      `/question-import/drafts/${encodeURIComponent(draftId)}/annotations`,
+      { revision, annotations },
+    ),
+  previewImport: (draftId: string) =>
+    client.post<PreviewResult>(`/question-import/drafts/${encodeURIComponent(draftId)}/preview`),
+  confirmImport: (draftId: string) =>
+    client.post<{ questionSet: QuestionSetView }>(
+      `/question-import/drafts/${encodeURIComponent(draftId)}/confirm`,
+    ),
+  cancelDraft: (draftId: string) =>
+    client.del<void>(`/question-import/drafts/${encodeURIComponent(draftId)}`),
+  // 003：目前題目集
+  getQuestionSet: () => client.get<{ questionSet: QuestionSetView | null }>('/question-set'),
+  clearQuestionSet: () => client.del<void>('/question-set'),
+  reimportQuestionSet: () => client.post<{ draft: ImportDraftView }>('/question-set/reimport'),
 };

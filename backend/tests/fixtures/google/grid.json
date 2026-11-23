@@ -1,0 +1,50 @@
+{
+  "sheets": [
+    {
+      "merges": [
+        {
+          "sheetId": 0,
+          "startRowIndex": 2,
+          "endRowIndex": 3,
+          "startColumnIndex": 2,
+          "endColumnIndex": 6
+        },
+        {
+          "sheetId": 0,
+          "startRowIndex": 40,
+          "endRowIndex": 41,
+          "startColumnIndex": 0,
+          "endColumnIndex": 2
+        }
+      ],
+      "data": [
+        {
+          "rowMetadata": [{}, { "hiddenByUser": true }, {}, {}],
+          "columnMetadata": [{}, {}, {}, { "hiddenByUser": true }],
+          "rowData": [
+            { "values": [{}, { "formattedValue": "標題" }] },
+            {},
+            {
+              "values": [
+                {},
+                { "formattedValue": "題號" },
+                { "formattedValue": "題目" },
+                {},
+                {},
+                {},
+                { "formattedValue": "作答" }
+              ]
+            },
+            {
+              "values": [
+                {},
+                { "formattedValue": "1" },
+                { "formattedValue": "#REF!", "effectiveValue": { "errorValue": { "type": "REF" } } }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

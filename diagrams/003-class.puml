@@ -1,0 +1,275 @@
+@startuml 003-class
+title F3/F4 類別圖：Google 連結、標註草稿與題目集
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+hide empty members
+
+package "共用型別（shared/annotation.ts）" {
+  enum QuestionKind {
+    SINGLE
+    GROUP
+  }
+
+  class SheetLink {
+    +spreadsheetId: string
+    +gid: int?
+  }
+
+  class GridSnapshot {
+    +rowCount: int <<1..500>>
+    +columnCount: int <<1..52>>
+    +cells: GridCell[]
+    +merges: MergeRange[]
+    +hiddenRows: int[]
+    +hiddenColumns: int[]
+  }
+
+  class AnnotationDocument {
+    +questions: AnnotatedQuestion[] <<0..200>>
+  }
+
+  class AnnotatedQuestion {
+    +key: string
+    +label: string <<1-20 字元>>
+    +labelManual: boolean
+    +kind: QuestionKind
+    +stemCell: CellRef?
+    +parts: AnnotatedPart[] <<1..10>>
+  }
+
+  class AnnotatedPart {
+    +questionCell: CellRef?
+    +answerCell: CellRef?
+  }
+
+  class Issue {
+    +code: IssueCode
+    +questionKey: string?
+    +partIndex: int?
+    +cell: CellRef?
+    +message: string
+    +hint: string
+  }
+
+  class ValidationResult {
+    +issues: Issue[]
+    +warnings: Issue[]
+    +totalIssues: int
+  }
+
+  class QuestionSetView {
+    +source: SheetSource
+    +questionCount: int
+    +slotCount: int
+    +questions: QuestionView[]
+    +warnings: Issue[]
+  }
+}
+
+package "實體（資料表）" {
+  enum DraftStatus {
+    OPEN
+    CONFIRMED
+    CANCELLED
+  }
+
+  class GoogleConnection {
+    +userId: string
+    +googleEmail: string
+    -refreshTokenEnc: string
+    -accessTokenEnc: string?
+    +accessTokenExpiresAt: DateTime?
+    +scopes: string
+    +connectedAt: DateTime
+    +lastUsedAt: DateTime
+  }
+
+  class OAuthState {
+    +state: string
+    +userId: string
+    +sessionId: string
+    -codeVerifierEnc: string
+    +expiresAt: DateTime
+  }
+
+  class ImportDraft {
+    +id: string
+    +userId: string
+    +status: DraftStatus
+    +source: SheetSource
+    +sheets: SheetTab[]
+    +snapshot: GridSnapshot
+    +metadataFingerprint: string
+    +annotations: AnnotationDocument
+    +restoredCount: int
+    +revision: int
+    +expiresAt: DateTime
+  }
+
+  class QuestionSet {
+    +source: SheetSource
+    +questionCount: int
+    +slotCount: int
+    +importedAt: DateTime
+    +importedBy: string
+    +draftId: string
+  }
+
+  class ImportedQuestion {
+    +position: int
+    +questionKey: string
+    +label: string
+    +kind: QuestionKind
+    +stemText: string?
+    +stemCell: CellRef?
+  }
+
+  class AnswerSlot {
+    +partIndex: int
+    +partLabel: string?
+    +questionText: string
+    +questionCell: CellRef
+    +answerCell: CellRef
+    +answerHadContent: boolean
+  }
+
+  class QuestionEvent {
+    +at: DateTime
+    +actorUserId: string
+    +type: QuestionEventType
+    +spreadsheetId: string?
+    +questionCount: int?
+  }
+}
+
+package "服務與整合" {
+  class GoogleAuthService {
+    +getStatus(userId): GoogleStatus
+    +startAuthorization(userId, sessionId): string
+    +handleCallback(params, sessionId): CallbackResult
+    +disconnect(userId): void
+    +getAccessToken(userId, forceRefresh?): string
+  }
+
+  class SheetsService {
+    +readSheet(userId, spreadsheetId, sheetId?): SheetData
+    +replaceAnnotations(userId, spreadsheetId, sheetId, entries): void
+    +locateAnswerCells(userId, spreadsheetId, sheetId): SlotLocation[]
+    +writeCells(userId, spreadsheetId, sheetId, updates): void
+  }
+
+  class QuestionImportService {
+    +createDraft(userId, link, sheetId?): ImportDraft
+    +createDraftFromSource(userId, source): ImportDraft
+    +getCurrentDraft(userId): ImportDraft?
+    +saveAnnotations(userId, draftId, revision, doc): SaveResult
+    +preview(userId, draftId): PreviewResult
+    +confirm(userId, draftId): QuestionSetView
+    +cancel(userId, draftId): void
+  }
+
+  class QuestionSetService {
+    +getCurrent(): QuestionSetView?
+    +clear(userId): void
+    +reimport(userId): ImportDraft
+  }
+
+  class AnnotationCodec {
+    +encode(doc, snapshot, sheetId): MetadataEntry[]
+    +decode(entries, snapshot): DecodeResult
+    +fingerprint(entries): string
+  }
+
+  class TokenCipher {
+    +encrypt(plain): string
+    +decrypt(cipherText): string
+  }
+
+  interface GoogleOAuthClient {
+    +buildAuthUrl(state, codeChallenge): string
+    +exchangeCode(code, codeVerifier): TokenSet
+    +refresh(refreshToken): TokenSet
+    +revoke(token): void
+    +fetchEmail(accessToken): string
+  }
+
+  interface SheetsGateway {
+    +getSpreadsheet(token, spreadsheetId): SpreadsheetInfo
+    +getUsedRange(token, spreadsheetId, sheetTitle): UsedRange
+    +getGrid(token, spreadsheetId, sheetTitle, range): GridSnapshot
+    +searchMetadata(token, spreadsheetId, sheetId): MetadataEntry[]
+    +batchUpdate(token, spreadsheetId, requests): void
+    +updateValues(token, spreadsheetId, sheetTitle, updates): void
+  }
+
+  interface GoogleConnectionRepository {
+    +findByUser(userId): GoogleConnection?
+    +upsert(connection): void
+    +updateAccessToken(userId, accessTokenEnc, expiresAt): void
+    +delete(userId): void
+  }
+
+  interface OAuthStateRepository {
+    +create(state): void
+    +take(state): OAuthState?
+    +deleteExpired(now): void
+  }
+
+  interface ImportDraftRepository {
+    +create(draft): void
+    +findById(id): ImportDraft?
+    +findOpenByUser(userId): ImportDraft?
+    +updateAnnotations(id, revision, doc, expiresAt): boolean
+    +markConfirmed(id): void
+    +markCancelled(id): void
+  }
+
+  interface QuestionSetRepository {
+    +findCurrent(): QuestionSetRecord?
+    +replace(set, questions): void
+    +clear(): void
+  }
+
+  interface QuestionEventRepository {
+    +record(event): void
+  }
+}
+
+AnnotationDocument "1" *-- "0..200" AnnotatedQuestion
+AnnotatedQuestion "1" *-- "1..10" AnnotatedPart
+AnnotatedQuestion --> QuestionKind
+ValidationResult "1" *-- "*" Issue
+ImportDraft --> DraftStatus
+ImportDraft "1" *-- "1" GridSnapshot
+ImportDraft "1" *-- "1" AnnotationDocument
+QuestionSet "1" *-- "1..200" ImportedQuestion
+ImportedQuestion "1" *-- "1..10" AnswerSlot
+ImportedQuestion --> QuestionKind
+
+GoogleAuthService --> GoogleOAuthClient
+GoogleAuthService --> TokenCipher
+GoogleAuthService --> GoogleConnectionRepository
+GoogleAuthService --> OAuthStateRepository
+GoogleAuthService --> QuestionEventRepository
+GoogleConnectionRepository ..> GoogleConnection
+OAuthStateRepository ..> OAuthState
+SheetsService --> GoogleAuthService
+SheetsService --> SheetsGateway
+SheetsService --> AnnotationCodec
+QuestionImportService --> SheetsService
+QuestionImportService --> AnnotationCodec
+QuestionImportService --> ImportDraftRepository
+QuestionImportService --> QuestionSetRepository
+QuestionImportService --> QuestionEventRepository
+QuestionImportService ..> ValidationResult : validateAnnotations()
+QuestionImportService ..> QuestionSetView
+QuestionSetService --> QuestionImportService
+QuestionSetService --> QuestionSetRepository
+QuestionSetService --> QuestionEventRepository
+ImportDraftRepository ..> ImportDraft
+QuestionSetRepository ..> QuestionSet
+QuestionEventRepository ..> QuestionEvent
+AnnotationCodec ..> AnnotationDocument
+AnnotationCodec ..> GridSnapshot
+@enduml

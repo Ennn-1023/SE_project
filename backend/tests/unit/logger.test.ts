@@ -40,6 +40,34 @@ describe('Logger', () => {
     expect(parsed.headers[0].cookie).toBe(MASK);
   });
 
+  it('Google 串接相關的機敏欄位被遮罩（003 T007）', () => {
+    const { logger, lines } = capture();
+    logger.warn('google', {
+      code: 'fake-auth-code-1',
+      codeVerifier: 'fake-verifier-2',
+      encryptionKey: 'fake-key-3',
+      accessToken: 'fake-access-4',
+      refreshToken: 'fake-refresh-5',
+      errorCode: 'SHEET_FORBIDDEN',
+    });
+    const out = lines[0]!;
+    for (const leaked of [
+      'fake-auth-code-1',
+      'fake-verifier-2',
+      'fake-key-3',
+      'fake-access-4',
+      'fake-refresh-5',
+    ]) {
+      expect(out).not.toContain(leaked);
+    }
+    const parsed = JSON.parse(out);
+    expect(parsed.code).toBe(MASK);
+    expect(parsed.codeVerifier).toBe(MASK);
+    expect(parsed.encryptionKey).toBe(MASK);
+    // 非機敏的錯誤碼欄位保留，方便除錯
+    expect(parsed.errorCode).toBe('SHEET_FORBIDDEN');
+  });
+
   it('silent 時不輸出', () => {
     const lines: string[] = [];
     const logger = createLogger({ sink: (l) => lines.push(l), silent: true });

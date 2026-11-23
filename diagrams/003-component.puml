@@ -1,0 +1,127 @@
+@startuml 003-component
+title F3/F4 組件圖：Google 試算表串接與學習單互動標註匯入
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+
+actor "老師" as Teacher
+
+package "前端（瀏覽器，RWD）" as FE {
+  [老師管理頁\nTeacherDashboard] as TeacherPage
+  [題目管理頁\nQuestionManagePage] as QPage
+  [Google 連結狀態\nGoogleConnectionPanel] as GPanel
+  [學習單連結表單\nSheetLinkForm] as LinkForm
+  [學習單格子\nSheetGrid] as Grid
+  [標註面板\nAnnotationPanel] as AnnPanel
+  [匯入預覽\nImportPreview] as Preview
+  [目前題目集\nQuestionSetPanel] as SetPanel
+  [API 用戶端\nApiClient] as ApiClient
+}
+
+package "共用規則（shared）" as SH {
+  [標註規則\nAnnotationRules\n(parseSheetLink / validateAnnotations / autoNumber)] as Rules
+}
+
+package "後端（伺服器）" as BE {
+  package "路由層" {
+    [GoogleRoutes\n/google] as GoogleRoutes
+    [QuestionImportRoutes\n/question-import] as ImportRoutes
+    [QuestionSetRoutes\n/question-set] as SetRoutes
+  }
+  package "中介層（001）" {
+    [RequireAuth / RequireRole\n/ Validate / ErrorHandler] as MW
+  }
+  package "服務層" {
+    [GoogleAuthService\n(授權、token 更新、中斷)] as GAuth
+    [SheetsService\n(F3 串接層：讀取、標註、定位、寫入)] as Sheets
+    [QuestionImportService\n(草稿、預覽、確認匯入)] as ImportSvc
+    [QuestionSetService\n(目前題目集、清除、重新匯入)] as SetSvc
+    [AnnotationCodec\n(標註 ⇄ developer metadata)] as Codec
+    [TokenCipher\n(AES-256-GCM)] as Cipher
+  }
+  package "外部整合層" {
+    [GoogleOAuthClient] as OAuthClient
+    [SheetsGateway] as Gateway
+  }
+  package "資料存取層" {
+    [GoogleConnectionRepository] as ConnRepo
+    [OAuthStateRepository] as StateRepo
+    [ImportDraftRepository] as DraftRepo
+    [QuestionSetRepository] as SetRepo
+    [QuestionEventRepository] as EventRepo
+  }
+  [Config\n(GOOGLE_* 環境變數)] as Config
+  [Logger\n(遮罩 token / code)] as Logger
+}
+
+database "資料庫" as DB
+cloud "Google OAuth 2.0" as GoogleOAuth
+cloud "Google Sheets API v4" as GoogleSheets
+file ".env\n(GOOGLE_CLIENT_ID,\nGOOGLE_CLIENT_SECRET,\nGOOGLE_TOKEN_ENCRYPTION_KEY ...)" as EnvFile
+
+Teacher --> TeacherPage
+TeacherPage --> QPage : 題目管理按鈕
+Teacher --> GoogleOAuth : 同意授權
+QPage --> GPanel
+QPage --> LinkForm
+QPage --> Grid
+QPage --> AnnPanel
+QPage --> Preview
+QPage --> SetPanel
+Grid --> AnnPanel : 點選格子
+AnnPanel ..> Rules : 即時驗證
+LinkForm ..> Rules : 連結格式
+GPanel --> ApiClient
+LinkForm --> ApiClient
+AnnPanel --> ApiClient : 自動儲存
+Preview --> ApiClient
+SetPanel --> ApiClient
+
+ApiClient --> GoogleRoutes : HTTPS
+ApiClient --> ImportRoutes : HTTPS
+ApiClient --> SetRoutes : HTTPS
+GoogleOAuth --> GoogleRoutes : 授權回呼
+
+GoogleRoutes --> MW
+ImportRoutes --> MW
+SetRoutes --> MW
+
+GoogleRoutes --> GAuth
+ImportRoutes --> ImportSvc
+SetRoutes --> SetSvc
+SetSvc --> ImportSvc : 重新匯入
+SetSvc --> SetRepo
+SetSvc --> EventRepo
+
+ImportSvc --> Sheets
+ImportSvc --> Codec
+ImportSvc ..> Rules : 伺服器端驗證
+ImportSvc --> DraftRepo
+ImportSvc --> SetRepo
+ImportSvc --> EventRepo
+
+Sheets --> GAuth : 取得 access token
+Sheets --> Gateway
+Sheets --> Codec
+GAuth --> OAuthClient
+GAuth --> Cipher
+GAuth --> ConnRepo
+GAuth --> StateRepo
+GAuth --> EventRepo
+
+OAuthClient --> GoogleOAuth : HTTPS（15 秒逾時）
+Gateway --> GoogleSheets : HTTPS（15 秒逾時）
+
+ConnRepo --> DB
+StateRepo --> DB
+DraftRepo --> DB
+SetRepo --> DB
+EventRepo --> DB
+
+Config --> EnvFile
+GAuth ..> Config
+Cipher ..> Config
+OAuthClient ..> Config
+MW ..> Logger
+@enduml

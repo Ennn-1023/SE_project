@@ -9,6 +9,7 @@ import { Layout } from './components/Layout';
 import { ChangePasswordForm } from './pages/ChangePasswordForm';
 import { DevTeacherPanel } from './pages/DevTeacherPanel';
 import { homePathFor, LoginPage } from './pages/LoginPage';
+import { QuestionManagePage } from './pages/QuestionManagePage';
 import { StudentHome } from './pages/StudentHome';
 import { StudentPage } from './pages/StudentPage';
 import { TeacherDashboard } from './pages/TeacherDashboard';
@@ -82,6 +83,14 @@ export function AppRoutes() {
         element={
           <Guard role="TEACHER">
             <TeacherDashboard />
+          </Guard>
+        }
+      />
+      <Route
+        path="/teacher/questions"
+        element={
+          <Guard role="TEACHER">
+            <QuestionManagePage />
           </Guard>
         }
       />

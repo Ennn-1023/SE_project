@@ -1,0 +1,78 @@
+@startuml 003-sequence-reimport
+title 時序圖：重新匯入（帶回標註）、清除題目集，以及供 F10 使用的定位與寫入
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+autonumber
+
+actor "老師" as T
+participant "QuestionSetPanel" as SP
+participant "ApiClient" as API
+participant "QuestionSetRoutes" as R
+participant "QuestionSetService" as QS
+participant "QuestionImportService" as IS
+participant "SheetsService" as SS
+participant "SheetsGateway" as GW
+participant "AnnotationCodec" as AC
+participant "ImportDraftRepository" as DR
+participant "QuestionSetRepository" as QR
+participant "QuestionEventRepository" as ER
+participant "Google Sheets" as G
+
+== 重新匯入 ==
+T -> SP : 按「重新匯入」
+SP -> API : reimport()
+API -> R : POST /question-set/reimport
+note right of R : RequireAuth → RequireRole(TEACHER)
+R -> QS : reimport(userId)
+QS -> QR : findCurrent()
+alt 沒有題目集
+  QS --> R : AppError(404「目前沒有題目集可重新匯入」)
+else 有題目集
+  QS -> IS : createDraftFromSource(userId, 題目集來源)
+  IS -> SS : readSheet(userId, spreadsheetId, sheetId)
+  SS -> GW : getSpreadsheet / getUsedRange / getGrid / searchMetadata
+  GW -> G : GET（插入或刪除列欄後，metadata 已隨列欄移動）
+  G --> GW : 最新格子與 metadata
+  SS --> IS : SheetData
+  IS -> AC : decode(entries, snapshot)
+  note right of AC
+    依 qimport.row 所在列 × qimport.col 錨點所在欄
+    還原每個格子的「目前」位置。
+    欄錨點遺失／列 metadata 遺失 → RESTORED_CELL_MISSING
+    兩個標註落在同一格 → RESTORED_CONFLICT
+    （該小題格子設為 null，題目標為未完成）
+  end note
+  AC --> IS : AnnotationDocument、warnings
+  IS -> DR : create(draft, restoredCount)
+  IS --> QS : ImportDraft
+  QS -> ER : record(REIMPORTED)
+  QS --> R : ImportDraft
+  R --> API : 201 { draft }
+  API --> T : 「已帶回上次的標註（N 題）」→ 進入標註（後續同 003-sequence-import）
+end
+
+== 清除題目集 ==
+T -> SP : 按「清除題目集」並確認
+SP -> API : clearQuestionSet()
+API -> R : DELETE /question-set
+R -> QS : clear(userId)
+QS -> QR : findCurrent()
+note right of QS : 沒有題目集時直接結束（仍回 204、不記錄事件）
+QS -> QR : clear()
+QS -> ER : record(CLEARED)
+note right of QS : 試算表上的標註保留，下次匯入可帶回
+R --> API : 204
+API --> SP : 「尚未匯入任何題目」
+
+== 供 F10 寫回使用（本功能只建立並以自動化測試驗證） ==
+[-> SS : locateAnswerCells(userId, spreadsheetId, sheetId)
+SS -> GW : getUsedRange / getGrid / searchMetadata
+SS -> AC : decode(entries, snapshot)
+SS -->[ : SlotLocation[]（questionKey＋partIndex → 目前格子）
+[-> SS : writeCells(userId, spreadsheetId, sheetId, updates)
+SS -> GW : getSpreadsheet(token, spreadsheetId)
+note right of SS : 由 sheetId 取得分頁名稱（寫入 range 需要）
+SS -> GW : updateValues(token, spreadsheetId, 分頁名稱, updates)
+GW -> G : POST values:batchUpdate（只寫入指定格子）
+@enduml

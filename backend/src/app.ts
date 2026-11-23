@@ -24,6 +24,26 @@ import { GroupService } from './services/groupService.js';
 import { AccountService } from './services/accountService.js';
 import { AuthService } from './services/authService.js';
 import { SessionService } from './services/sessionService.js';
+import { GoogleConnectionRepository } from './db/googleConnectionRepository.js';
+import { ImportDraftRepository } from './db/importDraftRepository.js';
+import { OAuthStateRepository } from './db/oauthStateRepository.js';
+import { QuestionEventRepository } from './db/questionEventRepository.js';
+import { QuestionSetRepository } from './db/questionSetRepository.js';
+import { AnnotationCodec } from './domain/annotationCodec.js';
+import type {
+  GoogleOAuthClient as GoogleOAuthClientPort,
+  SheetsGateway as SheetsGatewayPort,
+} from './domain/questionPorts.js';
+import { GoogleOAuthClient } from './integrations/google/googleOAuthClient.js';
+import { SheetsGateway } from './integrations/google/sheetsGateway.js';
+import { TokenCipher } from './lib/tokenCipher.js';
+import { googleRoutes } from './routes/googleRoutes.js';
+import { questionImportRoutes } from './routes/questionImportRoutes.js';
+import { questionSetRoutes } from './routes/questionSetRoutes.js';
+import { GoogleAuthService } from './services/googleAuthService.js';
+import { QuestionImportService } from './services/questionImportService.js';
+import { QuestionSetService } from './services/questionSetService.js';
+import { SheetsService } from './services/sheetsService.js';
 
 export interface AppDeps {
   config: Config;
@@ -31,6 +51,8 @@ export interface AppDeps {
   clock?: Clock;
   hasher?: PasswordHasherPort;
   logger?: Logger;
+  /** Google 外部整合；測試注入 FakeGoogle，未提供時依 config.google 建立真實的 HTTP 實作（003） */
+  google?: { oauth: GoogleOAuthClientPort; sheets: SheetsGatewayPort };
 }
 
 /** 依組件圖組裝 repository 與 service。 */
@@ -43,8 +65,57 @@ export function createContainer(deps: AppDeps) {
     users: new UserRepository(deps.db, now),
     sessions: new SessionRepository(deps.db),
     groupSettings: new GroupSettingsRepository(deps.db),
+    googleConnections: new GoogleConnectionRepository(deps.db),
+    oauthStates: new OAuthStateRepository(deps.db),
+    importDrafts: new ImportDraftRepository(deps.db),
+    questionSets: new QuestionSetRepository(deps.db),
+    questionEvents: new QuestionEventRepository(deps.db),
   };
   const sessionService = new SessionService(repos.sessions, deps.config, clock);
+  const runInTransaction = <T>(fn: () => T): T => transaction(deps.db, fn);
+
+  // 003 Google 試算表串接（組件圖 003-component）；config.google 為 null 時功能停用
+  const googleConfig = deps.config.google;
+  const oauthClient =
+    deps.google?.oauth ?? (googleConfig ? new GoogleOAuthClient(googleConfig) : null);
+  const sheetsGateway = deps.google?.sheets ?? new SheetsGateway();
+  const googleAuth = new GoogleAuthService({
+    config: googleConfig,
+    oauth: googleConfig ? oauthClient : null,
+    cipher: googleConfig ? new TokenCipher(googleConfig.encryptionKey) : null,
+    connections: repos.googleConnections,
+    states: repos.oauthStates,
+    events: repos.questionEvents,
+    clock,
+    logger,
+  });
+  const codec = new AnnotationCodec();
+  // F10 用：依標註取得每個作答格目前的位置
+  const sheets = new SheetsService(googleAuth, sheetsGateway, logger, (entries, grid) =>
+    codec
+      .decode(entries, grid)
+      .doc.questions.flatMap((q) =>
+        q.parts.flatMap((p, partIndex) =>
+          p.answerCell ? [{ questionKey: q.key, partIndex, answerCell: p.answerCell }] : [],
+        ),
+      ),
+  );
+  const questionImport = new QuestionImportService({
+    sheets,
+    codec,
+    drafts: repos.importDrafts,
+    sets: repos.questionSets,
+    events: repos.questionEvents,
+    clock,
+    logger,
+    runInTransaction,
+  });
+  const questionSets = new QuestionSetService({
+    sets: repos.questionSets,
+    events: repos.questionEvents,
+    imports: questionImport,
+    clock,
+  });
   const services = {
     sessions: sessionService,
     auth: new AuthService(repos.users, sessionService, hasher, deps.config, clock),
@@ -52,8 +123,11 @@ export function createContainer(deps: AppDeps) {
     groups: new GroupService(repos.users, repos.groupSettings, clock, (fn) =>
       transaction(deps.db, fn),
     ),
+    googleAuth,
+    sheets,
+    questionImport,
+    questionSets,
   };
-  const runInTransaction = <T>(fn: () => T): T => transaction(deps.db, fn);
   return {
     config: deps.config,
     db: deps.db,
@@ -83,6 +157,8 @@ export function createApp(deps: CreateAppOptions) {
 
   const api = Router();
   api.use(requireJson);
+  // 標註文件最多 200 題 × 10 小題，允許較大的請求（plan.md 實作要點 5）；其餘 API 維持 100 KB
+  api.use('/question-import', express.json({ limit: '1mb' }));
   api.use(express.json({ limit: '100kb' }));
   api.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
@@ -99,6 +175,26 @@ export function createApp(deps: CreateAppOptions) {
   api.use(
     '/groups',
     groupRoutes({ groups: services.groups, sessions: services.sessions, users: repos.users }),
+  );
+  api.use(
+    '/google',
+    googleRoutes({ google: services.googleAuth, sessions: services.sessions, users: repos.users }),
+  );
+  api.use(
+    '/question-import',
+    questionImportRoutes({
+      imports: services.questionImport,
+      sessions: services.sessions,
+      users: repos.users,
+    }),
+  );
+  api.use(
+    '/question-set',
+    questionSetRoutes({
+      questionSets: services.questionSets,
+      sessions: services.sessions,
+      users: repos.users,
+    }),
   );
   if (deps.buzzer) {
     const auth = requireAuth(services.sessions, repos.users);
