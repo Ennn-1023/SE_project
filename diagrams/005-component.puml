@@ -1,0 +1,86 @@
+@startuml 005-component
+title F10/F11 組件圖：答案寫回 Google 試算表＋活動結果匯出 CSV
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+
+actor "老師" as Teacher
+
+package "前端（瀏覽器，RWD）" as FE {
+  [搶答活動頁\nActivityControlPage\n(004 擴充：寫回／匯出入口)] as ActPage
+  [活動摘要\nActivitySummary\n(004 擴充)] as Summary
+  [寫回預覽對話框\nWritebackPreviewDialog\n(摘要、覆蓋選項、後備位置勾選)] as PreviewDlg
+  [寫回結果\nWritebackResultPanel] as ResultPanel
+  [匯出按鈕\nExportCsvButton] as ExportBtn
+  [API 用戶端\nApiClient] as ApiClient
+}
+
+package "共用規則（shared）" as SH {
+  [寫回驗證\nWritebackRules\n(overwriteMode / fallback 勾選)] as Rules
+}
+
+package "後端（伺服器）" as BE {
+  package "路由層" {
+    [ResultExportRoutes\n/teacher/activity/writeback\n/teacher/activity/export.csv] as ExpRoutes
+  }
+  package "中介層（001）" {
+    [RequireAuth / RequireRole\n/ Validate / ErrorHandler] as MW
+  }
+  package "服務層" {
+    [ActivityResultReader\n(最近一場活動、有效輪次結果)] as Reader
+    [WritebackService\n(預覽、重新比對、單批寫入、冪等)] as WbSvc
+    [CsvExportService\n(列組裝、排序)] as CsvSvc
+    [CsvEncoder\n(BOM、CRLF、跳脫、防公式注入)] as Encoder
+    [SheetsService\n(003：readSheet / writeCells)] as Sheets
+    [AnnotationCodec\n(003：decode 標註 → 作答格位置)] as Codec
+    [ActivityService\n(004：開始活動時記錄寫回目標與後備位置)] as ActSvc
+  }
+  package "資料存取層" {
+    [Repository\n(004：活動、題目快照、送出、結果、輪次)] as ActRepo
+    [WritebackTargetRepository\n(來源試算表、分頁、作答格後備位置)] as TargetRepo
+    [ExportEventRepository\n(寫回／匯出紀錄，不含答案)] as EventRepo
+  }
+  package "外部整合（003）" {
+    [GoogleSheetsGateway] as Gateway
+  }
+  [Logger\n(不記錄答案與 token)] as Logger
+}
+
+database "資料庫" as DB
+cloud "Google Sheets API" as Google
+
+Teacher --> ActPage
+ActPage --> Summary
+ActPage --> PreviewDlg : 寫回 Google 試算表
+ActPage --> ExportBtn : 匯出結果 CSV
+PreviewDlg --> ResultPanel
+PreviewDlg ..> Rules
+PreviewDlg --> ApiClient : 預覽／確認寫回
+ExportBtn --> ApiClient : 下載 CSV
+
+ApiClient --> ExpRoutes : HTTPS
+ExpRoutes --> MW
+ExpRoutes --> WbSvc
+ExpRoutes --> CsvSvc
+
+WbSvc ..> Rules : 伺服器端驗證
+WbSvc --> Reader
+WbSvc --> TargetRepo : 目標試算表、後備位置
+WbSvc --> Sheets : 讀取格子與標註、單批寫入（RAW）
+WbSvc --> Codec : 還原作答格位置／找不到／重複
+WbSvc --> EventRepo
+CsvSvc --> Reader
+CsvSvc --> Encoder
+CsvSvc --> EventRepo
+Reader --> ActRepo
+ActSvc --> TargetRepo : 開始活動時寫入快照
+Sheets --> Gateway
+Gateway --> Google : OAuth（老師授權，token 加密保存）
+
+ActRepo --> DB
+TargetRepo --> DB
+EventRepo --> DB
+WbSvc ..> Logger
+CsvSvc ..> Logger
+@enduml

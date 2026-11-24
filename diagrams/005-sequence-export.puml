@@ -1,0 +1,47 @@
+@startuml 005-sequence-export
+title F11 時序圖：匯出活動結果 CSV
+skinparam backgroundColor #FAF7F0
+skinparam sequence {
+  ParticipantBackgroundColor #F5F0E6
+  ParticipantBorderColor #1F3A93
+  ArrowColor #1F3A93
+  LifeLineBorderColor #1F3A93
+}
+autonumber
+
+actor "老師" as T
+participant "ActivityControlPage\n+ ExportCsvButton" as UI
+participant "ResultExportRoutes" as R
+participant "CsvExportService" as CS
+participant "ActivityResultReader" as RD
+participant "CsvEncoder" as EN
+database "Repository" as DB
+
+T -> UI : 按「匯出結果 CSV」
+UI -> R : GET /teacher/activity/export.csv
+R -> R : RequireAuth + RequireRole(TEACHER)
+alt 學生或未登入
+  R --> UI : 403「權限不足」／401 要求登入（不含任何結果資料）
+else 老師
+  R -> CS : export(teacher)
+  CS -> RD : latestActivity()
+  alt 從未有活動
+    RD --> CS : null
+    CS --> R : 「尚無搶答活動結果可寫回或匯出」
+  else 有活動
+    CS -> RD : validResults(activityId)
+    RD -> DB : 題目快照、參與組別、有效輪次送出與小題答案
+    RD --> CS : 每題狀態與送出（作廢輪次已排除）
+    CS -> CS : buildRows：已結束題目 × 參與組別 × 小題\n作答中／未開放題目各一列\n排序：題目順序 → 順位（未送出最後）→ 小題
+    CS -> EN : encode(header, rows)
+    EN -> EN : neutralizeFormula（= @ 開頭前置 '；+ - 開頭維持原樣）
+    EN -> EN : escapeField（逗號／雙引號／換行 → 雙引號包住）
+    EN -> EN : UTF-8 BOM + CRLF
+    EN --> CS : CSV 內容
+    CS -> DB : ExportEvent(CSV_EXPORTED, 列數，不含答案)
+    CS --> R : 檔名「搶答結果_YYYYMMDD-HHmm.csv」+ 內容
+  end
+end
+R --> UI : 200 text/csv; Content-Disposition: attachment
+UI --> T : 瀏覽器下載 CSV
+@enduml

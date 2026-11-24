@@ -1,0 +1,82 @@
+@startuml 005-sequence-writeback
+title F10 時序圖：寫回預覽 → 覆蓋確認 → 重新比對 → 單一批次寫入
+skinparam backgroundColor #FAF7F0
+skinparam sequence {
+  ParticipantBackgroundColor #F5F0E6
+  ParticipantBorderColor #1F3A93
+  ArrowColor #1F3A93
+  LifeLineBorderColor #1F3A93
+}
+autonumber
+
+actor "老師" as T
+participant "ActivityControlPage\n+ WritebackPreviewDialog" as UI
+participant "ResultExportRoutes" as R
+participant "WritebackService" as WS
+participant "ActivityResultReader" as RD
+participant "SheetsService\n(003)" as SS
+participant "AnnotationCodec\n(003)" as AC
+participant "GoogleSheetsGateway" as GW
+database "Repository" as DB
+
+== 寫回預覽 ==
+T -> UI : 按「寫回 Google 試算表」
+UI -> R : POST /teacher/activity/writeback/preview
+R -> R : RequireAuth + RequireRole(TEACHER)
+R -> WS : preview(teacher)
+WS -> RD : validResults(activityId)
+RD -> DB : 已結束題目 × 目前有效輪次（排除作廢、作答中、未開放）
+RD --> WS : 每題成功組別與各小題答案、不寫入題目與原因
+alt 沒有任何搶答成功組別
+  WS --> R : 「本場活動沒有搶答成功的答案可寫回」
+else 有可寫回的答案
+  WS -> DB : 讀取寫回目標與作答格後備位置
+  WS -> SS : readSheet(teacher, spreadsheetId, sheetId)
+  SS -> GW : 讀取格子與標註（老師 OAuth token）
+  GW --> SS : grid + metadata
+  SS --> WS : SheetData
+  WS -> AC : decode(metadata, grid)
+  AC --> WS : 每個作答格目前位置＋警告（找不到／重複）
+  WS -> WS : 比對目前內容 → 空白／將覆蓋／相同內容／找不到標註／重複
+  WS -> WS : 暫存預覽於記憶體（previewId、目標格與當下內容、結果指紋；15 分鐘）
+  WS --> R : WritebackPreview + 摘要
+end
+R --> UI : 200 預覽
+UI --> T : 顯示每項目與摘要；有覆蓋時要求選擇\n「全部覆蓋」或「略過已有內容」
+
+== 確認寫回 ==
+T -> UI : 選擇覆蓋選項（勾選後備位置）→「確認寫回」
+UI -> R : POST /teacher/activity/writeback/confirm {previewId, mode, fallbackKeys}
+R -> WS : confirm(teacher, previewId, mode, fallbackKeys)
+WS -> WS : WritebackRules 驗證輸入；取得寫回鎖（冪等）
+alt 同一預覽已在寫回中或已完成
+  WS --> R : 「寫回進行中，請稍候」或同一份結果
+else 首次確認
+  WS -> SS : readSheet（重新讀取目標格）
+  SS -> GW : 讀取
+  GW --> SS : grid + metadata
+  WS -> AC : decode(metadata, grid)
+  WS -> RD : validResults（結果指紋）
+  WS -> WS : recheck：位置、內容與結果指紋是否與預覽一致
+  alt 預覽後有變動
+    WS -> DB : ExportEvent(WRITEBACK_FAILED, 變動)
+    WS --> R : 409「學習單在預覽後有變動（第 N 題作答格），請重新預覽」
+  else 一致
+    WS -> WS : 依 mode 篩選：略過相同內容、(略過已有內容)、未勾選的後備位置
+    WS -> SS : writeCells(updates)（純文字、單一批次）
+    SS -> GW : updateValues（RAW）
+    alt Google 錯誤（授權失效／無編輯權限／受保護／逾時）
+      GW --> SS : error
+      SS --> WS : AppError（不含 token 與內部細節）
+      WS -> DB : ExportEvent(WRITEBACK_FAILED, 錯誤代碼)
+      WS --> R : 對應的清楚訊息（試算表未被修改）
+    else 成功
+      GW --> SS : ok
+      WS -> DB : ExportEvent(WRITEBACK_SUCCEEDED, 格數，不含答案)
+      WS --> R : WritebackOutcome
+    end
+  end
+end
+R --> UI : 結果
+UI --> T : 「已寫回 4 格，其中 1 格覆蓋既有內容」＋開啟試算表連結
+@enduml
