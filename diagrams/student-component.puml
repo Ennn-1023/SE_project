@@ -12,7 +12,7 @@ skinparam package {
 }
 
 actor "學生\nStudent" as Student
-actor "開發/測試者\nDeveloper" as Dev
+actor "老師（開發工具）\nTeacher in dev" as Dev
 
 package "frontend（React + Vite，RWD mobile-first）" {
   [StudentPage\n依 phase 切換畫面] as Page
@@ -28,8 +28,9 @@ package "frontend（React + Vite，RWD mobile-first）" {
   [api/client\nREST + 錯誤格式] as ApiClient
   [realtime/socket\n推播接收+自動重連] as RtClient
   [DesignTokens\n米白底/撞色按鈕] as Tokens
-  [DevLoginPage\nmock 學生登入] as DevLogin
-  [DevTeacherPanel\n模擬老師操作] as DevPanel
+  [DevTeacherPanel\n模擬老師操作（/dev，需老師登入）] as DevPanel
+  [StudentHome（001）\n已分組 →「進入搶答」] as Home
+  [LoginPage（001）\n學號＋密碼登入] as Login
 }
 
 package "shared（前後端共用）" {
@@ -38,24 +39,29 @@ package "shared（前後端共用）" {
   [realtime\n重連設定] as RtCfg
 }
 
+package "backend 001（登入、權限、組別；見 001-component）" {
+  [RequireAuth + RequireRole\nsession cookie／角色] as Guard
+  [SessionService\nvalidate／touch] as Sessions
+  [UserRepository\nusers（含 group_number）] as Users
+  [ErrorHandler\n統一錯誤格式（001 與 002 錯誤碼）] as ErrH
+}
+
 package "backend（Express + Socket.IO，server-authoritative）" {
-  [config/env\n環境變數驗證] as Env
+  [config/env\n環境變數驗證（001 Config）] as Env
   [StudentRouter\nGET /state、POST /submissions] as StudentApi
-  [AuthMiddleware\nJWT → 學生/組別] as Auth
-  [ErrorHandler\n統一錯誤格式] as ErrH
-  [SocketServer\n/student，依組別 room 推播] as Gateway
+  [AuthMiddleware\nattachStudent／authenticateCookie\n001 session → 學生/目前組別] as Auth
+  [SocketServer\n/student，依學生目前組別產生視角] as Gateway
   [ActivityStateMachine\n階段/計時器/重啟恢復] as FSM
   [SubmissionService\n驗證+同步排序（記憶體）] as SubmitSvc
   [VisibilityFilter\nbuildView：作答中隔離他組] as Filter
   [ResultService\n結束時以交易寫入] as ResultSvc
-  [Repository\n資料存取] as Repo
-  database "SQLite (node:sqlite)\nactivities / submissions /\nquestion_results" as Store
+  [Repository\n資料存取（組別、學生讀 001 資料表）] as Repo
+  database "SQLite (node:sqlite)\n001：users / sessions / group_settings\n002：activities / questions /\nsubmissions / question_results" as Store
 }
 
 package "dev only（ENABLE_DEV_TOOLS，正式環境停用）" {
-  [DevAuthRouter\nmock 登入] as DevAuth
   [DevTeacherRouter\n開放/時間到/結束/下一題/\n結束活動/重設/結果查詢] as DevTeacher
-  [MockSeed\n題目/學生/組別] as Seed
+  [MockSeed\n活動/題目（F3 前）] as Seed
 }
 
 package "Out of scope（後續功能讀取）" #EEEEEE {
@@ -63,6 +69,9 @@ package "Out of scope（後續功能讀取）" #EEEEEE {
   [F10/F11 寫回/匯出] as Export
 }
 
+Student --> Login
+Login --> Home
+Home --> Page : 進入搶答
 Student --> Page
 Page --> Waiting
 Page --> Answering
@@ -79,22 +88,25 @@ StateHook --> RtClient : 訂閱 state:update
 Input --> ApiClient : 送出答案
 Input ..> Rules
 RtClient ..> RtCfg
-Dev --> DevLogin
 Dev --> DevPanel
-DevLogin --> ApiClient
 DevPanel --> ApiClient
 
 ApiClient --> StudentApi : REST
-ApiClient --> DevAuth : REST (dev)
 ApiClient --> DevTeacher : REST (dev)
-RtClient <--> Gateway : WebSocket／polling
+RtClient <--> Gateway : WebSocket／polling（session cookie）
 
+StudentApi --> Guard : 登入＋學生角色
+DevTeacher --> Guard : 登入＋老師角色
+Guard --> Sessions
+Guard --> Users
 StudentApi --> Auth
-Gateway --> Auth : handshake token
+Gateway --> Auth : handshake cookie
+Auth --> Sessions
+Auth --> Repo : getStudent（目前組別）
 StudentApi --> SubmitSvc : submit
 StudentApi --> Gateway : pushToTeam
 StudentApi --> Filter : viewFor
-Gateway --> Filter : viewFor（每個 room 各自產生）
+Gateway --> Filter : viewFor（每個連線依目前組別各自產生）
 SubmitSvc --> FSM : 檢查 phase
 SubmitSvc ..> Rules
 FSM --> ResultSvc : 題目結束（onQuestionClosed）
@@ -103,14 +115,15 @@ FSM --> Repo : 保存階段
 ResultSvc --> Repo : submissions + result（單一交易）
 Filter ..> Repo : 題目/組別/已結束的送出
 Repo --> Store
+Users --> Store
+Sessions --> Store
 StudentApi ..> ErrH
 ErrH ..> Codes
 Env ..> FSM : 啟動設定
 
-DevAuth --> Auth : 簽發 token
 DevTeacher --> FSM : 模擬老師操作
 DevTeacher --> Repo : 結果/送出查詢
-Seed --> Repo : 寫入 mock 資料
+Seed --> Repo : 寫入 mock 活動與題目
 
 Teacher ..> Store : 讀取
 Export ..> Store : 讀取

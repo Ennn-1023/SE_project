@@ -125,7 +125,7 @@ h3 {
   padding: var(--space-3);
   border: 2px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: #fff;
+  background: var(--color-input-bg);
   color: var(--color-text);
   font: inherit;
 }
@@ -336,7 +336,7 @@ h3 {
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
-  background: #fff;
+  background: var(--color-input-bg);
   border: 2px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: var(--space-3);

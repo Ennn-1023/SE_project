@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { AppContext } from '../../context';
 import { AppError, parseOrThrow } from '../errors';
-import { currentStudent, requireStudent } from '../middleware/auth';
+import { attachStudent, currentStudent } from '../middleware/auth';
 
 const submitSchema = z.object({
   questionId: z.string().trim().min(1, { error: '不可為空' }).max(64, { error: '最多 64 字元' }),
@@ -13,7 +13,8 @@ const submitSchema = z.object({
 /** 學生 API（contracts/rest-api.md） */
 export function studentRouter(ctx: AppContext): Router {
   const r = Router();
-  r.use(requireStudent(ctx.config.sessionSecret, ctx.repo));
+  // 登入與學生角色由外層的 requireAuth + requireRole('STUDENT') 檢查（001 F1）
+  r.use(attachStudent(ctx.repo));
 
   r.get('/state', (_req, res) => {
     res.json(ctx.viewFor(currentStudent(res.locals)));

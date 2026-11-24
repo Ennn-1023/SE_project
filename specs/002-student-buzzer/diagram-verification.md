@@ -69,6 +69,24 @@
 | 作答中重啟 | ✅ 改為啟動時 `recoverAfterRestart()`；送出只在記憶體，隨行程結束消失（`server.ts`） |
 | 下一題／結束活動 | ✅ 方法名改為 `next()`、`end()` |
 
+## 整合 001 後的再驗證（2026-11-23）
+
+整合 001 的登入與組別後，三張圖已更新並重新產生 PNG，逐項確認與程式一致：
+
+| 元素 | 對應程式 | 結果 |
+|------|----------|------|
+| AuthMiddleware（attachStudent／authenticateCookie） | `backend/src/http/middleware/auth.ts` | ✅ |
+| RequireAuth + RequireRole、SessionService、UserRepository（001） | `backend/src/middleware/*`、`services/sessionService.ts`、`db/userRepository.ts` | ✅ |
+| SocketServer：依學生目前組別產生視角 | `backend/src/realtime/socketServer.ts`（`pushWhere`） | ✅ |
+| Repository：Team／Student 由 001 資料推導 | `backend/src/data/repositories.ts`（`getTeam`、`listTeams`、`getStudent`、`listStudents`） | ✅ |
+| SQLite：001 與 002 資料表 | `backend/src/db/migrations.ts`（version 1、2） | ✅ |
+| MockSeed：只寫活動與題目 | `backend/src/data/mock/seed.ts` | ✅ |
+| LoginPage／StudentHome（001）→ StudentPage | `frontend/src/main.tsx`（`/student/buzzer`）、`pages/StudentHome.tsx` | ✅ |
+| DevTeacherPanel 需老師登入 | `frontend/src/main.tsx`（`/dev`）、`backend/src/app.ts` | ✅ |
+| 時序：REST 經 RequireAuth → attachStudent；handshake 帶 session cookie | `backend/src/app.ts`、`http/routes/student.ts`、`realtime/socketServer.ts` | ✅ |
+
+已移除且不再出現在圖中：DevAuthRouter、DevLoginPage、JWT、teams／students 資料表。
+
 ## 驗證指令
 
 ```powershell

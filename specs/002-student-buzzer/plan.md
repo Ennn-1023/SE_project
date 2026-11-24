@@ -126,6 +126,21 @@ frontend/
 
 **Structure Decision**: 採用 web application 結構（`backend/` + `frontend/`），另外增加 `shared/` 存放前後端共用的型別、答案規則與錯誤碼，確保「500 字上限」與錯誤訊息只定義一次。dev 工具（mock 登入、模擬老師操作）放在後端 `routes/dev*` 與前端 `pages/Dev*`，以 `ENABLE_DEV_TOOLS` 控制是否啟用。
 
+## 與 001-foundation-auth-groups 的整合（2026-11-23）
+
+main 合併 001（F0／F1／F2）後，搶答改用正式登入與組別管理。設計圖已先更新（student-component／class／sequence，PNG 已重新產生）。
+
+| 項目 | 原設計（本計畫） | 整合後 |
+|------|------------------|--------|
+| 登入 | dev mock 登入簽發 JWT（`Authorization: Bearer`、`handshake.auth.token`） | 001 的 session cookie（`sid`）；REST 經 `RequireAuth` + `RequireRole('STUDENT')` → `attachStudent`；socket 以 `authenticateCookie` 驗證 handshake cookie |
+| 學生與組別 | `students`／`teams` 資料表（mock） | 001 的 `users`（role = STUDENT）與 `group_settings`；`teamId = T{組別編號}`、組名「第 n 組」；不再建立 teams／students 表，submissions 的 team_id／student_id 不設外鍵 |
+| 推播分組 | 連線時加入 `team:{id}` room | 每次推播依學生「目前」組別產生視角（連線後改組也正確） |
+| DB | `openDb` 內建 schema、`SQLITE_PATH` | 001 的 migration（version 2 建立搶答資料表）、`DATABASE_PATH` |
+| dev 工具 | `/api/dev/login`、`DevLoginPage`、模擬老師 API 不需登入 | 移除 mock 登入；`/api/dev/teacher/*`、`/api/dev/results` 需老師登入；前端 `/dev` 需老師身分 |
+| 錯誤處理 | 搶答自己的 errorHandler／notFound | 001 的 ErrorHandler 統一處理（含搶答錯誤碼）；`toErrorBody` 保留給 socket |
+| 前端 | `/` 搶答頁、`/dev` 登入頁、`react-router-dom` | `/student/buzzer`（學生首頁已分組時「進入搶答」）、`react-router` v7；錯誤訊息改用 001 的 `ErrorMessage`；tokens.css／global.css 放入較低的 cascade layer，與 Tailwind 色票同名同值 |
+| 套件 | jsonwebtoken、cors | 移除（改用 001 session；前後端同源） |
+
 ## Complexity Tracking
 
 > 無違反憲章的項目，不需填寫。

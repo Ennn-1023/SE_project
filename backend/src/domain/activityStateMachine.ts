@@ -1,7 +1,7 @@
 import type { TeacherStatus } from '@buzzer/shared';
 import type { Repository } from '../data/repositories';
 import { AppError } from '../http/errors';
-import type { Activity, ClosedReason } from './types';
+import type { Activity, ClosedReason } from './buzzerTypes';
 
 export const DEFAULT_SECONDS = 60;
 export const MIN_SECONDS = 5;

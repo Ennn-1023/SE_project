@@ -1,0 +1,81 @@
+@startuml 001-sequence-login
+title 時序圖：登入、角色導向與權限檢查
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+autonumber
+
+actor "使用者\n(老師/學生)" as U
+participant "LoginPage" as LP
+participant "ApiClient" as API
+participant "AuthRoutes" as R
+participant "Validate" as V
+participant "AuthService" as AS
+participant "UserRepository" as UR
+participant "PasswordHasher" as H
+participant "SessionService" as SS
+database "DB" as DB
+
+U -> LP : 輸入帳號、密碼並送出
+LP -> API : login(account, password)
+API -> R : POST /auth/login
+R -> V : 驗證必填（帳號、密碼）
+alt 輸入不合法
+  V --> R : AppError(400, field, message, hint)
+  R --> API : 400 錯誤
+  API --> LP : 顯示欄位錯誤
+else 輸入合法
+  R -> AS : login(account, password)
+  AS -> UR : findByAccount(trim + 不分大小寫)
+  UR -> DB : 查詢
+  DB --> UR : user?
+  alt 帳號已鎖定
+    AS --> R : AppError(423, "嘗試次數過多，請 X 分鐘後再試")
+  else 帳號不存在 或 密碼錯誤
+    AS -> H : verify(password, hash)
+    H --> AS : false
+    opt 帳號存在
+      AS -> UR : recordLoginFailure(userId)
+      note right : 失敗 5 次（15 分鐘內）\n→ lockedUntil = now + 15 分鐘
+      AS -> UR : findById(userId)
+      UR --> AS : user（含 lockedUntil）
+    end
+    alt 本次失敗使帳號被鎖定（第 5 次）
+      AS --> R : AppError(423, "嘗試次數過多，請 X 分鐘後再試")
+    else 未鎖定
+      AS --> R : AppError(401, "帳號或密碼錯誤")
+    end
+  else 驗證成功
+    AS -> H : verify(password, hash)
+    H --> AS : true
+    AS -> UR : resetLoginFailures(userId)
+    AS -> SS : create(userId)
+    SS -> DB : 儲存 Session
+    SS --> AS : session
+    AS --> R : session, role
+    R --> API : 200 + 登入憑證（HttpOnly）+ role
+    alt role == TEACHER
+      API --> LP : 導向老師管理頁
+    else role == STUDENT
+      API --> LP : 導向學生首頁
+    end
+  end
+end
+
+== 之後的每個受保護請求 ==
+U -> API : 呼叫老師功能（例：建立學生帳號）
+API -> R : 帶登入憑證的請求
+R -> SS : validate(sessionId)
+alt 無效 / 已登出 / 閒置逾 2 小時
+  SS --> R : AppError(401, "請重新登入")
+  R --> API : 401 → 導向登入頁
+else 有效
+  R -> UR : findById(session.userId)
+  SS -> SS : touch(sessionId)
+  alt 角色不是 TEACHER
+    R --> API : AppError(403, "此功能僅限老師使用")
+  else 角色為 TEACHER
+    R --> API : 執行功能並回傳結果
+  end
+end
+@enduml

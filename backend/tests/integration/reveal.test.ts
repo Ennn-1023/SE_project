@@ -53,12 +53,12 @@ describe('搶答結束後揭曉結果（US2、Q-T2、Q-T3）', () => {
     await t.submit(tokA, 'Q1', '三次握手');
     await t.teacher.timeUp();
 
-    const results = (await t.http.get('/api/dev/results')).body as QuestionResultDto[];
+    const results = (await t.http.get('/api/dev/results').set('Cookie', t.teacherCookie)).body as QuestionResultDto[];
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({ question_id: 'Q1', answer: 'SYN → SYN-ACK → ACK', winner_team: 'T2' });
     expect(new Date(results[0]!.submitted_at!).toISOString()).toBe(results[0]!.submitted_at);
 
-    const subs = await t.http.get('/api/dev/submissions').query({ questionId: 'Q1' });
+    const subs = await t.http.get('/api/dev/submissions').set('Cookie', t.teacherCookie).query({ questionId: 'Q1' });
     expect(subs.status).toBe(200);
     expect(subs.body.map((s: { team_id: string; rank: number }) => [s.team_id, s.rank])).toEqual([
       ['T2', 1],
@@ -76,7 +76,7 @@ describe('搶答結束後揭曉結果（US2、Q-T2、Q-T3）', () => {
     const v = await cl.waitFor(closed);
     expect(v.results).toEqual([]);
     expect(v.myTeamOutcome).toBe('NOT_SUBMITTED');
-    const results = (await t.http.get('/api/dev/results')).body as QuestionResultDto[];
+    const results = (await t.http.get('/api/dev/results').set('Cookie', t.teacherCookie)).body as QuestionResultDto[];
     expect(results).toEqual([{ question_id: 'Q2', answer: null, winner_team: null, submitted_at: null }]);
   });
 
@@ -94,7 +94,7 @@ describe('搶答結束後揭曉結果（US2、Q-T2、Q-T3）', () => {
 
   it('/api/dev/submissions 缺少 questionId 回 400', async () => {
     t = await startTestServer();
-    const res = await t.http.get('/api/dev/submissions');
+    const res = await t.http.get('/api/dev/submissions').set('Cookie', t.teacherCookie);
     expect(res.status).toBe(400);
     expect(res.body.error).toMatchObject({ code: 'VALIDATION_ERROR', field: 'questionId' });
   });

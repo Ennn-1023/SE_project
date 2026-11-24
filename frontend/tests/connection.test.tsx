@@ -1,12 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
-import { tokenStore } from '../src/api/client';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { StudentPage } from '../src/pages/StudentPage';
 import { answeringView, createFakeSocket, json, routeFetch } from './helpers';
 
-beforeEach(() => tokenStore.set('tok'));
 afterEach(() => vi.unstubAllGlobals());
 
 function renderPage(routes: Parameters<typeof routeFetch>[0]) {
@@ -14,8 +12,11 @@ function renderPage(routes: Parameters<typeof routeFetch>[0]) {
   vi.stubGlobal('fetch', fetchMock);
   const sock = createFakeSocket();
   render(
-    <MemoryRouter>
-      <StudentPage socketFactory={sock.factory} />
+    <MemoryRouter initialEntries={['/student/buzzer']}>
+      <Routes>
+        <Route path="/student/buzzer" element={<StudentPage socketFactory={sock.factory} />} />
+        <Route path="/login" element={<p>登入頁</p>} />
+      </Routes>
     </MemoryRouter>,
   );
   return { sock, fetchMock };
@@ -88,12 +89,12 @@ describe('斷線與重連（US4、FR-005、Q-T19）', () => {
     expect(screen.queryByLabelText('你的答案')).not.toBeInTheDocument();
   });
 
-  it('token 失效（UNAUTHORIZED）時清除 token', async () => {
+  it('登入失效（socket UNAUTHORIZED）時回到登入頁', async () => {
     const { sock } = renderPage({
       'GET /api/student/state': () =>
         json({ error: { code: 'UNAUTHORIZED', field: null, message: '尚未登入或登入已過期', hint: '請重新登入' } }, 401),
     });
     sock.connection('offline', 'UNAUTHORIZED');
-    await vi.waitFor(() => expect(tokenStore.get()).toBeNull());
+    await vi.waitFor(() => expect(screen.getByText('登入頁')).toBeInTheDocument());
   });
 });

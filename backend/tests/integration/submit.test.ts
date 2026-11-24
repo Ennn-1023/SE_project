@@ -72,13 +72,13 @@ describe('POST /api/student/submissions', () => {
     await t.teacher.open('Q1', 60);
     const noAnswer = await t.http
       .post('/api/student/submissions')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', token)
       .send({ questionId: 'Q1', answer: 123 });
     expect(noAnswer.status).toBe(400);
     expect(noAnswer.body.error).toMatchObject({ code: 'VALIDATION_ERROR', field: 'answer' });
     const noQuestion = await t.http
       .post('/api/student/submissions')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', token)
       .send({ answer: 'x' });
     expect(noQuestion.body.error).toMatchObject({ code: 'VALIDATION_ERROR', field: 'questionId' });
   });
@@ -88,7 +88,7 @@ describe('POST /api/student/submissions', () => {
     await t.teacher.open('Q1', 60);
     const res = await t.http
       .post('/api/student/submissions')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', token)
       .send([1, 2]);
     expect(res.status).toBe(400);
     expect(res.body.error).toEqual({
@@ -103,7 +103,7 @@ describe('POST /api/student/submissions', () => {
     const token = await t.loginAs('S201');
     await t.teacher.open('Q1', 60);
     const send = (body: object) =>
-      t.http.post('/api/student/submissions').set('Authorization', `Bearer ${token}`).send(body);
+      t.http.post('/api/student/submissions').set('Cookie', token).send(body);
 
     const arr = await send({ questionId: ['Q1'], answer: 'x' });
     expect(arr.body.error).toMatchObject({ code: 'VALIDATION_ERROR', field: 'questionId', message: 'questionId 必須是文字' });

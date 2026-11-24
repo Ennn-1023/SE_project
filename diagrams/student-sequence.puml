@@ -22,13 +22,14 @@ participant "ResultService" as RS
 database "Repository\n(SQLite)" as DB
 actor "DevTeacherRouter\n(dev only)" as T
 
-note over S1, T : 預設每組 1 位同學登入（A 組代表開兩個分頁示範同組同步）
+note over S1, T : 學生以 001 帳號登入（session cookie），在學生首頁已分組後按「進入搶答」。\n預設每組 1 位同學登入（A 組代表開兩個分頁示範同組同步）。\nDevTeacherRouter 需以老師身分登入（RequireAuth + RequireRole TEACHER）。
 
 == 等待開放 ==
 S1 -> C : 開啟搶答頁
-C -> API : GET /api/student/state
+C -> API : GET /api/student/state（session cookie）
+API -> API : RequireAuth + RequireRole(STUDENT)\n→ attachStudent：查出學生目前組別
 API --> C : StudentView {phase=WAITING}
-C -> GW : 連線（handshake token）
+C -> GW : 連線（handshake 帶 session cookie）
 GW --> C : state:update（目前狀態）
 C --> S1 : 「等待老師開放題目」
 
@@ -38,7 +39,7 @@ FSM -> SS : onQuestionOpened → startQuestion(Q1)
 FSM -> DB : saveActivity(ANSWERING, endsAt)
 FSM -> FSM : setTimeout(60s)
 FSM -> GW : onChange → pushAll()
-GW --> C : 各組 room 各自 buildView\n{phase, question, endsAt, serverNow}(不含他組資料)
+GW --> C : 每個連線依學生目前組別各自 buildView\n{phase, question, endsAt, serverNow}(不含他組資料)
 C --> S1 : 題號/題目/作答區/依 endsAt 倒數
 C --> S2 : 同上
 C --> S3 : 同上
@@ -51,14 +52,14 @@ SS -> FSM : 讀取 activity（ANSWERING 且為 Q1？）
 SS -> SS : 同步寫入 Map(B 組, receivedAt, rank=1)
 SS --> API : Submission
 API -> GW : pushToTeam(B 組)
-GW --> C : 僅 B 組 room：myTeamSubmission
+GW --> C : 僅目前屬於 B 組的連線：myTeamSubmission
 API --> C : 201 {questionId, teamId, answer}（不含 rank）
 
 S1 -> C : 送出答案 "A 的答案"
 C -> API : POST /submissions
 API -> SS : submit → Map(A 組, rank=2)
 API -> GW : pushToTeam(A 組)
-GW --> C : 僅 A 組 room：「本組已送出」
+GW --> C : 僅目前屬於 A 組的連線：「本組已送出」
 C --> S2 : 「本組已送出」(作答區停用)
 
 S2 -> C : 再次送出(多分頁)

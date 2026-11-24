@@ -75,16 +75,16 @@ package "backend/domain" {
     +text: string
   }
 
-  class Team {
-    +teamId: string
+  class Team <<由 001 組別推導>> {
+    {field} +teamId: string [T{n}，n = 001 組別編號 1..組數]
     +activityId: string
-    +name: string
+    {field} +name: string [第 n 組]
   }
 
-  class Student {
-    +studentId: string
-    +name: string
-    {field} +teamId: string? [null = 未分組]
+  class Student <<由 001 users 推導>> {
+    {field} +studentId: string [users.account（學號）]
+    {field} +name: string [users.display_name]
+    {field} +teamId: string? [T{group_number}；null = 未分組]
   }
 
   class Submission {
@@ -161,8 +161,8 @@ package "backend/data + http" {
     +getCurrentActivity(): Activity?
     +saveActivity(activity)
     +getQuestion(id) / listQuestions()
-    +getTeam(id) / listTeams()
-    +getStudent(id) / listStudents()
+    {method} +getTeam(id) / listTeams() [讀 group_settings.group_count]
+    {method} +getStudent(id) / listStudents() [讀 users（role = STUDENT）]
     +hasResult(activityId, questionId): bool
     +listResults(activityId): QuestionResult[]
     +listSubmissions(activityId, questionId): Submission[]
@@ -186,8 +186,8 @@ package "backend/data + http" {
 
 Activity "1" --> "0..1" Question : current
 Activity "1" o-- "*" Question
-Activity "1" o-- "*" Team
-Team "1" o-- "*" Student
+Activity ..> "*" Team : 本場可參與的組別（= 001 組數）
+Team "1" o-- "*" Student : 001 組別指派
 Submission "*" --> "1" Question
 Submission "*" --> "1" Team : 每組每題至多 1 筆
 Submission "*" --> "1" Student : submittedBy

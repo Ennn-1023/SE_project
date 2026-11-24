@@ -28,9 +28,9 @@ describe('結束後送出被拒（US3、Q-T7、FR-011）', () => {
     expect(res.status).toBe(409);
     expect(res.body.error).toEqual(CLOSED_ERROR);
 
-    const subs = await t.http.get('/api/dev/submissions').query({ questionId: 'Q1' });
+    const subs = await t.http.get('/api/dev/submissions').set('Cookie', t.teacherCookie).query({ questionId: 'Q1' });
     expect(subs.body).toHaveLength(1);
-    const results = await t.http.get('/api/dev/results');
+    const results = await t.http.get('/api/dev/results').set('Cookie', t.teacherCookie);
     expect(results.body).toHaveLength(1);
     expect(results.body[0].winner_team).toBe('T2');
   });
@@ -69,7 +69,7 @@ describe('結束後送出被拒（US3、Q-T7、FR-011）', () => {
     t.server.ctx.machine.closeQuestion('TIME_UP');
     const res = await t.submit(tok, 'Q1', '答案');
     expect(res.body.error.code).toBe('QUESTION_CLOSED');
-    const results = await t.http.get('/api/dev/results');
+    const results = await t.http.get('/api/dev/results').set('Cookie', t.teacherCookie);
     expect(results.body[0]).toMatchObject({ question_id: 'Q1', winner_team: null });
   });
 });

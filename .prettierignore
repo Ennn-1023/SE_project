@@ -3,6 +3,10 @@ dist/
 build/
 coverage/
 package-lock.json
-specs/
-.specify/
 diagrams/
+plantuml.jar
+.specify/
+specs/
+roadmap.md
+.agents/
+.claude/

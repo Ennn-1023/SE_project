@@ -11,10 +11,14 @@ export interface StudentSocket {
 
 /**
  * /student namespace 連線（contracts/socket-events.md）；只接收伺服器推播。
+ * 以與 REST 相同的 session cookie 驗證（整合 001 F1），不另外傳送 token。
  * 重連設定共用 shared（退避上限 2 秒，SC-006）；瀏覽器回報網路恢復時立即重連，不等退避計時。
  */
-export function createStudentSocket(token: string, url = ''): StudentSocket {
-  const socket: Socket = io(`${url}/student`, { auth: { token }, ...SOCKET_RECONNECT_OPTIONS });
+export function createStudentSocket(url = ''): StudentSocket {
+  const socket: Socket = io(`${url}/student`, {
+    withCredentials: true,
+    ...SOCKET_RECONNECT_OPTIONS,
+  });
 
   const onOnline = () => {
     if (!socket.connected) socket.connect();

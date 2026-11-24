@@ -1,5 +1,5 @@
 import type { StudentView } from '@buzzer/shared';
-import type { Activity, Question, Submission, Team } from './types';
+import type { Activity, Question, Submission, Team } from './buzzerTypes';
 
 export interface ViewInput {
   activity: Activity;

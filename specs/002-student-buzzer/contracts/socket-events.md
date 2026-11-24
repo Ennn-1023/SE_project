@@ -6,14 +6,13 @@
 ## 連線與驗證
 
 ```ts
-io('/student', { auth: { token: '<jwt>' } })
+io('/student', { withCredentials: true }) // 同源，瀏覽器自動帶上 001 的 session cookie（sid）
 ```
 
-- handshake middleware 會驗證 token：
-  - 不合法或過期時，以 `connect_error` 拒絕，`err.message = "UNAUTHORIZED"`，`err.data = { code, message, hint }`（與 REST 錯誤內容相同）。
-- 驗證成功後，伺服器依 token 查出學生，並加入 room：
-  - 有組別：`team:{teamId}`
-  - 未分組：`student:{studentId}`
+- handshake middleware 以與 REST 相同的 001 session 驗證，且只允許學生：
+  - 沒有 cookie、session 不合法、已登出、閒置逾時或不是學生時，以 `connect_error` 拒絕，`err.message = "UNAUTHORIZED"`，`err.data = { code, message, hint }`（與 REST 錯誤內容相同）。
+- 驗證成功後，伺服器記下學號；**每次推播時**再依學生「目前」的組別（001 組別指派）各自產生視角，
+  因此老師或學生在連線後改變組別，下一次推播即正確（整合 001 後不再以固定的 room 分組）。
 - 連線成功後，伺服器**立刻**對該 socket 發送一次 `state:update`，內容為目前的 StudentView。前端也可以再呼叫 `GET /api/student/state` 作為保險。
 
 ## 伺服器 → 學生事件
@@ -26,8 +25,8 @@ Payload：`StudentView`（見 [data-model.md §7](../data-model.md)）。
 
 | 時機 | 送給誰 |
 |------|--------|
-| 階段轉換（open／close／next／end／reset） | 每個 `team:*` 與 `student:*` room 各自呼叫 `buildView` 後**分開送出** |
-| 某組送出成功 | 只送給 `team:{teamId}`，讓同組的其他分頁或裝置看到「本組已送出」 |
+| 階段轉換（open／close／next／end／reset） | 每個連線依其學生目前組別各自呼叫 `buildView` 後**分開送出** |
+| 某組送出成功 | 只送給目前屬於該組的連線，讓同組的其他分頁或裝置看到「本組已送出」 |
 | socket 剛連線 | 只送給該 socket |
 
 **禁止事項**（以整合測試驗證）：

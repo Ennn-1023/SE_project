@@ -1,13 +1,5 @@
 import type { ErrorBody } from '@buzzer/shared';
 
-const TOKEN_KEY = 'buzzer.token';
-
-export const tokenStore = {
-  get: () => sessionStorage.getItem(TOKEN_KEY),
-  set: (t: string) => sessionStorage.setItem(TOKEN_KEY, t),
-  clear: () => sessionStorage.removeItem(TOKEN_KEY),
-};
-
 /** 伺服器回傳的錯誤（contracts/rest-api.md 錯誤格式） */
 export class ApiError extends Error {
   constructor(
@@ -24,11 +16,9 @@ export class ApiError extends Error {
 
 export const NETWORK_ERROR = 'NETWORK_ERROR';
 
-/** fetch 包裝：自動帶 Bearer token，錯誤時拋出 ApiError */
+/** fetch 包裝：以同源的 session cookie 登入（001 F1），錯誤時拋出 ApiError */
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = {};
-  const token = tokenStore.get();
-  if (token) headers.Authorization = `Bearer ${token}`;
   if (init.body !== undefined) headers['Content-Type'] = 'application/json';
 
   let res: Response;
@@ -36,6 +26,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     res = await fetch(path, {
       method: init.method ?? (init.body === undefined ? 'GET' : 'POST'),
       headers,
+      credentials: 'same-origin',
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
     });
   } catch {

@@ -1,13 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import type { StudentView } from '@buzzer/shared';
-import { tokenStore } from '../src/api/client';
 import { ActivityEndedView } from '../src/components/ActivityEndedView';
 import { StudentPage } from '../src/pages/StudentPage';
 import { createFakeSocket, json, routeFetch } from './helpers';
 
-beforeEach(() => tokenStore.set('tok'));
 afterEach(() => vi.unstubAllGlobals());
 
 const ended: StudentView = {

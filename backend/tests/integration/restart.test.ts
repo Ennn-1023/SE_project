@@ -19,7 +19,7 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-const start = () => startTestServer({ SQLITE_PATH: dbPath });
+const start = () => startTestServer({ DATABASE_PATH: dbPath });
 
 describe('伺服器重啟（US4、Q-T14、FR-020、FR-020a、SC-008）', () => {
   it('作答中重啟：回到 WAITING，該題送出全部捨棄；已結束題目的資料完整保留；該題可重新開放', async () => {
@@ -46,12 +46,12 @@ describe('伺服器重啟（US4、Q-T14、FR-020、FR-020a、SC-008）', () => {
     expect(view.question).toBeUndefined();
     expect(view.myTeamSubmission).toBeUndefined();
 
-    const results = (await t.http.get('/api/dev/results')).body;
+    const results = (await t.http.get('/api/dev/results').set('Cookie', t.teacherCookie)).body;
     expect(results).toEqual([
       expect.objectContaining({ question_id: 'Q1', answer: 'Q1 的 B 答案', winner_team: 'T2' }),
     ]);
-    expect((await t.http.get('/api/dev/submissions').query({ questionId: 'Q1' })).body).toHaveLength(2);
-    expect((await t.http.get('/api/dev/submissions').query({ questionId: 'Q2' })).body).toEqual([]);
+    expect((await t.http.get('/api/dev/submissions').set('Cookie', t.teacherCookie).query({ questionId: 'Q1' })).body).toHaveLength(2);
+    expect((await t.http.get('/api/dev/submissions').set('Cookie', t.teacherCookie).query({ questionId: 'Q2' })).body).toEqual([]);
 
     // Q2 沒有結果，可以重新開放，各組重新送出
     expect((await t.teacher.open('Q2', 60)).status).toBe(200);

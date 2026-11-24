@@ -1,15 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, NETWORK_ERROR, tokenStore } from '../src/api/client';
+import { api, ApiError, NETWORK_ERROR } from '../src/api/client';
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('api client', () => {
-  it('帶上 Bearer token 並回傳 JSON', async () => {
-    tokenStore.set('tok-123');
+  it('以同源 session cookie 呼叫（不帶 Authorization），並回傳 JSON', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: 1 }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     await expect(api('/api/student/state')).resolves.toEqual({ ok: 1 });
-    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({ Authorization: 'Bearer tok-123' });
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.credentials).toBe('same-origin');
+    expect(init.headers).not.toHaveProperty('Authorization');
   });
 
   it('伺服器錯誤時拋出含 code、message、hint 的 ApiError', async () => {

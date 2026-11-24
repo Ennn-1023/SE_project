@@ -11,6 +11,7 @@ export default tseslint.config(
       '**/build/**',
       '**/coverage/**',
       '**/*.min.js',
+      'diagrams/**',
       '.specify/**',
       '.claude/**',
       '.agents/**',

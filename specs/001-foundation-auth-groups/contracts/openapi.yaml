@@ -1,0 +1,490 @@
+openapi: 3.1.0
+info:
+  title: 課程搶答系統 API — F0/F1/F2（登入、帳號、組別）
+  version: 0.1.0
+  description: |
+    所有路徑皆位於 `/api` 之下（設計圖中的 `/auth`、`/students`、`/groups` 即 `/api/auth` 等）。
+    登入憑證以 `sid` HttpOnly cookie 傳遞。所有變更操作須使用 `Content-Type: application/json`。
+    所有錯誤回應皆為 `ErrorResponse` 格式（FR-002）。
+servers:
+  - url: /api
+
+tags:
+  - name: system
+  - name: auth
+  - name: students
+  - name: groups
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: sid
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR      # 400
+                - INVALID_CURRENT_PASSWORD # 400（修改密碼時目前密碼錯誤；不視為未登入）
+                - INVALID_CREDENTIALS   # 401（登入失敗；前端不視為 session 失效）
+                - UNAUTHENTICATED       # 401（未登入／已登出／逾時；前端唯一導向登入頁的錯誤碼）
+                - FORBIDDEN             # 403
+                - NOT_FOUND             # 404
+                - STUDENT_EXISTS        # 409
+                - ALREADY_ASSIGNED      # 409
+                - GROUPS_NOT_OPEN       # 409
+                - GROUP_NOT_EMPTY       # 409
+                - ACCOUNT_LOCKED        # 423
+                - UNSUPPORTED_MEDIA     # 415
+                - INTERNAL_ERROR        # 500
+            message:
+              type: string
+              description: 給使用者看的中文訊息，說明哪裡出錯與原因
+            field:
+              type: string
+              description: 出錯的欄位名稱（輸入錯誤時）
+            hint:
+              type: string
+              description: 使用者可如何修正
+            details:
+              type: object
+              additionalProperties: true
+              description: 補充資料，例如 `retryAfterSeconds`、`currentGroupNumber`、`blockingGroups`
+      example:
+        error:
+          code: VALIDATION_ERROR
+          field: studentId
+          message: 學號格式不正確
+          hint: 學號須為 4–20 個英文字母或數字，不可含空白或符號
+
+    Role:
+      type: string
+      enum: [TEACHER, STUDENT]
+
+    CurrentUser:
+      type: object
+      required: [account, displayName, role]
+      properties:
+        account: { type: string, example: B11030001 }
+        displayName: { type: string, example: 王小明 }
+        role: { $ref: '#/components/schemas/Role' }
+        groupNumber:
+          type: [integer, 'null']
+          description: 僅學生；null 表示未分配
+
+    StudentListItem:
+      type: object
+      required: [studentId, name, groupNumber, usingDefaultPassword]
+      properties:
+        studentId: { type: string, example: B11030001 }
+        name: { type: string, example: 王小明 }
+        groupNumber: { type: [integer, 'null'] }
+        usingDefaultPassword: { type: boolean }
+
+    GroupSettings:
+      type: object
+      required: [groupCount]
+      properties:
+        groupCount: { type: integer, minimum: 0, maximum: 50 }
+
+    GroupMember:
+      type: object
+      required: [studentId, name]
+      properties:
+        studentId: { type: string }
+        name: { type: string }
+
+    GroupSummary:
+      type: object
+      required: [groupNumber, members, memberCount]
+      properties:
+        groupNumber: { type: integer, minimum: 1 }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/GroupMember' }
+        memberCount: { type: integer }
+
+  responses:
+    BadRequest:
+      description: 輸入驗證失敗（FR-015、FR-040 等）
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthenticated:
+      description: 未登入、已登出或閒置逾時（FR-022、FR-023）
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: 角色不符，例如學生呼叫老師功能（FR-021）
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: FORBIDDEN, message: 此功能僅限老師使用 }
+    NotFound:
+      description: 指定的學生不存在
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+security:
+  - sessionCookie: []
+
+paths:
+  /health:
+    get:
+      tags: [system]
+      summary: 健康檢查
+      security: []
+      responses:
+        '200':
+          description: 服務正常
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, const: ok }
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: 登入（FR-017～FR-019）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account, password]
+              properties:
+                account: { type: string, minLength: 1, description: 學號或老師帳號，比對時去除前後空白且不分大小寫 }
+                password: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        '200':
+          description: 登入成功；回應附 `Set-Cookie: sid=...; HttpOnly; SameSite=Lax; Path=/`
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: { $ref: '#/components/schemas/CurrentUser' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: 帳號或密碼錯誤（帳號是否存在一律相同訊息，FR-018）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example:
+                error: { code: INVALID_CREDENTIALS, message: 帳號或密碼錯誤 }
+        '423':
+          description: 15 分鐘內失敗 5 次，帳號暫時鎖定（FR-019）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example:
+                error:
+                  code: ACCOUNT_LOCKED
+                  message: 嘗試次數過多，請 12 分鐘後再試
+                  details: { retryAfterSeconds: 720 }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: 登出目前裝置（FR-022）
+      responses:
+        '204': { description: 已登出，`sid` cookie 被清除 }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: 取得目前登入者（前端重新整理後恢復狀態、角色導向）
+      responses:
+        '200':
+          description: 目前使用者
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: { $ref: '#/components/schemas/CurrentUser' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /auth/change-password:
+    post:
+      tags: [auth]
+      summary: 修改自己的密碼（FR-024；學生與老師皆可）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword, confirmPassword]
+              properties:
+                currentPassword: { type: string, minLength: 1 }
+                newPassword: { type: string, minLength: 8, maxLength: 64, description: 不得與預設密碼相同 }
+                confirmPassword: { type: string }
+      responses:
+        '204': { description: 修改成功；其他裝置的 session 保持有效 }
+        '400':
+          description: 新密碼不符規則（`VALIDATION_ERROR`），或目前密碼錯誤（`INVALID_CURRENT_PASSWORD`，`field: currentPassword`；session 保持有效）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example:
+                error:
+                  code: INVALID_CURRENT_PASSWORD
+                  field: currentPassword
+                  message: 目前密碼不正確
+                  hint: 請重新輸入目前使用中的密碼
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /students:
+    get:
+      tags: [students]
+      summary: 老師檢視學生清單（FR-026）
+      responses:
+        '200':
+          description: 依學號排序
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [students]
+                properties:
+                  students:
+                    type: array
+                    items: { $ref: '#/components/schemas/StudentListItem' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [students]
+      summary: 老師建立學生帳號（FR-010～FR-012、FR-015）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [studentId, name]
+              properties:
+                studentId: { type: string, pattern: '^\s*[A-Za-z0-9]{4,20}\s*$' }
+                name: { type: string, minLength: 1, maxLength: 50 }
+      responses:
+        '201':
+          description: 建立成功，組別為未分配、使用預設密碼
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [student]
+                properties:
+                  student: { $ref: '#/components/schemas/StudentListItem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: 學號已存在（不分大小寫），既有帳號不受影響（FR-011）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example:
+                error: { code: STUDENT_EXISTS, field: studentId, message: 學號 B1103 已存在 }
+
+  /students/{studentId}/reset-password:
+    post:
+      tags: [students]
+      summary: 老師將學生密碼重設為預設密碼，並撤銷其所有 session（FR-025）
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: 已重設 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/settings:
+    get:
+      tags: [groups]
+      summary: 取得組數（老師與學生皆可）
+      responses:
+        '200':
+          description: 目前組數
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupSettings' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    put:
+      tags: [groups]
+      summary: 老師設定組數（FR-031、FR-032）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupSettings' }
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupSettings' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: 被移除的組別仍有成員
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example:
+                error:
+                  code: GROUP_NOT_EMPTY
+                  field: groupCount
+                  message: 第 4 組仍有成員，無法將組數調降為 3
+                  hint: 請先將這些學生移到其他組或改回未分配
+                  details:
+                    blockingGroups:
+                      - groupNumber: 4
+                        members: [{ studentId: B1103, name: 王小明 }]
+
+  /groups/overview:
+    get:
+      tags: [groups]
+      summary: 老師檢視組別總覽與未分組名單（FR-038）
+      responses:
+        '200':
+          description: 列出 1..N 每一組（含 0 人的組）與未分組學生
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groupCount, groups, unassigned]
+                properties:
+                  groupCount: { type: integer }
+                  groups:
+                    type: array
+                    items: { $ref: '#/components/schemas/GroupSummary' }
+                  unassigned:
+                    type: array
+                    items: { $ref: '#/components/schemas/GroupMember' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /groups/me:
+    get:
+      tags: [groups]
+      summary: 學生取得自己的組別與可選範圍（FR-039）
+      responses:
+        '200':
+          description: 自己的組別
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groupNumber, groupCount]
+                properties:
+                  groupNumber: { type: [integer, 'null'] }
+                  groupCount: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [groups]
+      summary: 學生自選組別，僅限未分配（FR-034、FR-035、FR-040）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [groupNumber]
+              properties:
+                groupNumber: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: 選組成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groupNumber, groupCount]
+                properties:
+                  groupNumber: { type: integer }
+                  groupCount: { type: integer }
+        '400':
+          description: 組別編號不在 1..N（`details.groupCount` 附最新組數）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: 已分組（含剛被老師指派），或老師尚未開放分組（N = 0）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                alreadyAssigned:
+                  value:
+                    error:
+                      code: ALREADY_ASSIGNED
+                      message: 你已分組，如需更換請洽老師
+                      details: { currentGroupNumber: 2 }
+                notOpen:
+                  value:
+                    error: { code: GROUPS_NOT_OPEN, message: 老師尚未開放分組 }
+
+  /groups/assignments/{studentId}:
+    put:
+      tags: [groups]
+      summary: 老師指派學生到某組或改回未分配（FR-036）
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [groupNumber]
+              properties:
+                groupNumber:
+                  type: [integer, 'null']
+                  minimum: 1
+                  description: null = 改回未分配
+      responses:
+        '200':
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [student]
+                properties:
+                  student: { $ref: '#/components/schemas/StudentListItem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildView } from '../../src/domain/visibilityFilter';
-import type { Activity, Question, Submission, Team } from '../../src/domain/types';
+import type { Activity, Question, Submission, Team } from '../../src/domain/buzzerTypes';
 
 const NOW = Date.parse('2026-11-20T02:00:20.000Z');
 const question: Question = { questionId: 'Q1', activityId: 'A1', number: 1, text: '題目一' };

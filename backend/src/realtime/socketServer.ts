@@ -1,33 +1,28 @@
 import type { Server as HttpServer } from 'node:http';
 import { Server, type Namespace } from 'socket.io';
-import type { Repository } from '../data/repositories';
 import type { Realtime, ViewFor } from '../context';
-import type { Student } from '../domain/types';
-import { authenticate } from '../http/middleware/auth';
+import type { Student } from '../domain/buzzerTypes';
+import { authenticateCookie, type SocketAuthDeps } from '../http/middleware/auth';
 import { toErrorBody } from '../http/middleware/errorHandler';
 
 export const STATE_EVENT = 'state:update';
 
-const teamRoom = (teamId: string) => `team:${teamId}`;
-const studentRoom = (studentId: string) => `student:${studentId}`;
-
-interface Options {
-  secret: string;
+interface Options extends SocketAuthDeps {
   clientOrigin: string;
-  repo: Repository;
   viewFor: ViewFor;
 }
 
 /**
- * /student namespace（contracts/socket-events.md）。只有伺服器 → 學生推播；
- * 每個 room 各自產生視角後才送出，絕不對所有人廣播含送出資料的 payload。
+ * /student namespace（contracts/socket-events.md）。只有伺服器 → 學生推播。
+ * 以與 REST 相同的 session cookie 驗證（整合 001 F1）。每次推播都依學生「目前」的組別
+ * 各自產生視角後才送出（老師或學生在連線後改變組別也正確），絕不對所有人廣播含送出資料的 payload。
  */
 export function createRealtime(httpServer: HttpServer, opts: Options): Realtime & { io: Server } {
-  const io = new Server(httpServer, { cors: { origin: opts.clientOrigin } });
+  const io = new Server(httpServer, { cors: { origin: opts.clientOrigin, credentials: true } });
   const nsp: Namespace = io.of('/student');
 
   nsp.use((socket, next) => {
-    const student = authenticate(socket.handshake.auth?.token, opts.secret, opts.repo);
+    const student = authenticateCookie(socket.handshake.headers.cookie, opts);
     if (!student) {
       const { body } = toErrorBody('UNAUTHORIZED');
       const err = new Error('UNAUTHORIZED') as Error & { data?: unknown };
@@ -35,34 +30,34 @@ export function createRealtime(httpServer: HttpServer, opts: Options): Realtime 
       next(err);
       return;
     }
-    socket.data.student = student;
+    socket.data.studentId = student.studentId;
     next();
   });
 
+  /** 依學號重新查出學生（含目前組別）；帳號已不存在時回傳 null */
+  const current = (studentId: string): Student | null => opts.repo.getStudent(studentId);
+
   nsp.on('connection', (socket) => {
-    const student = socket.data.student as Student;
-    void socket.join(student.teamId ? teamRoom(student.teamId) : studentRoom(student.studentId));
+    const student = current(socket.data.studentId as string);
     // 連線（含重連）成功後立即送出目前的學生視角
-    socket.emit(STATE_EVENT, opts.viewFor(student));
+    if (student) socket.emit(STATE_EVENT, opts.viewFor(student));
   });
 
-  const pushToRoom = (room: string, student: { studentId: string; teamId: string | null }) => {
-    nsp.to(room).emit(STATE_EVENT, opts.viewFor(student));
+  /** 對符合條件的每個連線，依其學生目前的組別產生視角並送出 */
+  const pushWhere = (match: (s: Student) => boolean) => {
+    for (const socket of nsp.sockets.values()) {
+      const student = current(socket.data.studentId as string);
+      if (student && match(student)) socket.emit(STATE_EVENT, opts.viewFor(student));
+    }
   };
 
   return {
     io,
     pushToTeam(teamId) {
-      pushToRoom(teamRoom(teamId), { studentId: '', teamId });
+      pushWhere((s) => s.teamId === teamId);
     },
     pushAll() {
-      for (const room of nsp.adapter.rooms.keys()) {
-        if (room.startsWith('team:')) {
-          pushToRoom(room, { studentId: '', teamId: room.slice('team:'.length) });
-        } else if (room.startsWith('student:')) {
-          pushToRoom(room, { studentId: room.slice('student:'.length), teamId: null });
-        }
-      }
+      pushWhere(() => true);
     },
     close() {
       return new Promise<void>((resolve) => {

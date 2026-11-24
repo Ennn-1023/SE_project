@@ -1,5 +1,4 @@
-import { Navigate } from 'react-router-dom';
-import { tokenStore } from '../api/client';
+import { Link, Navigate } from 'react-router';
 import { useStudentState, type SocketFactory } from '../hooks/useStudentState';
 import { WaitingView } from '../components/WaitingView';
 import { AnsweringView } from '../components/AnsweringView';
@@ -11,14 +10,15 @@ interface Props {
   socketFactory?: SocketFactory;
 }
 
-/** 學生搶答頁：依伺服器的活動階段切換畫面（FR-001） */
+/**
+ * 學生搶答頁：依伺服器的活動階段切換畫面（002 FR-001）。
+ * 登入由路由守衛（001 F1）確認；session 失效（REST 401 或 socket UNAUTHORIZED）時回到登入頁。
+ */
 export function StudentPage({ socketFactory }: Props) {
-  const token = tokenStore.get();
-  const state = useStudentState(token, socketFactory);
+  const state = useStudentState(socketFactory);
 
-  if (!token || state.authError) {
-    if (state.authError) tokenStore.clear();
-    return <Navigate to="/dev" replace />;
+  if (state.authError) {
+    return <Navigate to="/login" replace />;
   }
 
   const { view, clockOffset, connection } = state;
@@ -33,6 +33,9 @@ export function StudentPage({ socketFactory }: Props) {
           <h1 className="app-title">課堂搶答</h1>
           {view && <span className="team-chip">{view.myTeam ? view.myTeam.name : '尚未分組'}</span>}
         </header>
+        <Link to="/student" className="btn btn-outline">
+          回學生首頁
+        </Link>
         {!view && <p className="muted">載入中…</p>}
         {view?.phase === 'WAITING' && <WaitingView />}
         {view?.phase === 'ANSWERING' && (

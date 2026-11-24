@@ -1,86 +1,89 @@
-# 課程搶答系統（SE Project）
+# 課程搶答系統
 
-課堂即時搶答系統。目前完成 **002-student-buzzer：學生端搶答**（roadmap F7、F9 與 F6 學生端部分），
-規格與設計見 [`specs/002-student-buzzer/`](specs/002-student-buzzer/)，架構圖見 [`diagrams/`](diagrams/)。
+課堂搶答系統：老師與學生登入，學生以組別為單位搶答。目前完成：
 
-| 目錄 | 內容 |
-|------|------|
-| `shared/` | 前後端共用：型別、錯誤碼與中文訊息、答案驗證規則（500 字上限） |
-| `backend/` | Express + TypeScript + Socket.IO + SQLite（Node 內建 `node:sqlite`） |
-| `frontend/` | React + Vite，米白底色＋撞色按鈕、mobile-first RWD |
+- **001-foundation-auth-groups（F0／F1／F2）**：米白／撞色 RWD 風格、老師建立的學號帳號與統一預設密碼登入、
+  伺服器端 session 與角色權限、以編號識別的組別管理（學生僅能在未分配時自選，老師可隨時調整）。
+- **002-student-buzzer（F7、F9 與 F6 學生端）**：學生以 001 帳號登入、已分組後進入搶答頁，
+  依活動階段切換畫面；以組別送出、伺服器決定順位；斷線重連與伺服器重啟後回到正確畫面。
 
-## 1. 安裝
+文件：
 
-需要 **Node.js 22 以上**（開發時使用 Node 26 LTS）：
+- 規劃：[roadmap.md](roadmap.md)
+- 規格、計畫、任務：[specs/001-foundation-auth-groups/](specs/001-foundation-auth-groups/)、[specs/002-student-buzzer/](specs/002-student-buzzer/)
+  （兩者的整合說明見 [002 plan.md「與 001 的整合」](specs/002-student-buzzer/plan.md)）
+- 設計圖（PlantUML 與 PNG）：[diagrams/](diagrams/)
+- 開發憲章：[.specify/memory/constitution.md](.specify/memory/constitution.md)
 
-```powershell
-winget install OpenJS.NodeJS.LTS
+## 技術
+
+| 目錄        | 內容                                                                                               |
+| ----------- | -------------------------------------------------------------------------------------------------- |
+| `shared/`   | 前後端共用：搶答型別、錯誤碼與中文訊息、答案驗證規則（500 字上限）                                 |
+| `backend/`  | Node.js 26、TypeScript、Express 5、Socket.IO、zod 4、內建 `node:sqlite` 與 `crypto.scrypt`         |
+| `frontend/` | React 19、react-router 7、Vite、Tailwind CSS v4（搶答頁另有 `tokens.css`／`global.css`，色票相同） |
+| 測試        | Vitest（後端 supertest + socket.io-client、前端 Testing Library + jsdom）                          |
+
+## 前置需求
+
+- Node.js 26 LTS（最低 24，需支援 `node:sqlite`）
+- Java 21 與根目錄的 `plantuml.jar`（只在重新產生設計圖時需要，不進版控）
+
+## 設定與啟動
+
+```bash
+cp .env.template .env
 ```
 
-```powershell
+在 `.env` 填入 `STUDENT_DEFAULT_PASSWORD`、`TEACHER_INITIAL_PASSWORD`、`SESSION_SECRET`（規則見 `.env.template`）。
+開發時可設 `ENABLE_DEV_TOOLS=true` 以使用「模擬老師搶答操作」。`.env` 已列入 `.gitignore`，請勿提交。
+
+```bash
 npm install
 ```
 
-## 2. 設定環境變數
-
-```powershell
-Copy-Item .env.template .env
+```bash
+npm run db:migrate --workspace backend
 ```
 
-在 `.env` 填入 `SESSION_SECRET`（至少 32 字元的隨機字串），可以用下列指令產生：
-
-```powershell
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```bash
+npm run db:seed --workspace backend
 ```
 
-開發時設定 `ENABLE_DEV_TOOLS=true` 才能使用 mock 登入與模擬老師操作。
-`.env` 已列入 `.gitignore`，**不可提交**。缺少必要變數時，後端會列出變數名稱並停止。
-
-## 3. 啟動
-
-```powershell
+```bash
 npm run dev
 ```
 
-- 後端：http://localhost:3000
-- 前端：http://localhost:5173
+後端在 `http://localhost:3000`，前端在 `http://localhost:5173`（`/api` 與 `/socket.io` 代理至後端）。
 
-第一次啟動會在 `backend/data/buzzer.db` 建立資料庫，並寫入 mock 資料：3 題、4 組，其中第 1 組有 2 位學生，另有 1 位未分組學生。
+1. 以 `TEACHER_ACCOUNT`（預設 `teacher`）與 `TEACHER_INITIAL_PASSWORD` 登入老師帳號，建立學生並設定組數。
+2. 學生以學號與預設密碼登入，選好組別後按「進入搶答」。
+3. 開發環境中，老師頁面的「模擬老師搶答操作（開發工具）」（`/dev`）可開放題目、時間到、結束、下一題、結束活動與重設。
+   題目在 F3（題目匯入）完成前使用 mock 的 3 題。
 
-### 開發工具頁 `/dev`
+詳細的驗證情境見 [001 quickstart.md](specs/001-foundation-auth-groups/quickstart.md) 與 [002 quickstart.md](specs/002-student-buzzer/quickstart.md)。
 
-1. 開啟 http://localhost:5173/dev ，選擇 mock 學生後登入，會進入學生搶答頁。
-2. 在另一個分頁（或無痕視窗）再開一次 `/dev`，用右側的「模擬老師操作」面板：開放題目（可設定 5–600 秒）、時間到、手動結束、下一題、結束活動、重設。
-3. 每題的結果可以在 `GET /api/dev/results` 查看。
+## 測試與檢查
 
-## 4. 測試
-
-| 範圍 | 指令 |
-|------|------|
-| 全部 | `npm test` |
-| shared | `npm run test -w shared` |
-| 後端 | `npm run test -w backend` |
-| 前端 | `npm run test -w frontend` |
-| Lint | `npm run lint` |
-
-完整的驗收情境見 [quickstart.md](specs/002-student-buzzer/quickstart.md)。
-
-## 5. 架構圖（憲章原則 VI）
-
-修改 `diagrams/*.puml` 後，必須重新產生 PNG。需要 Java 與 Graphviz：
-
-```powershell
-winget install EclipseAdoptium.Temurin.21.JRE
+```bash
+npm test
 ```
 
-```powershell
-winget install Graphviz.Graphviz
+```bash
+npm run lint
 ```
 
-再從 [PlantUML releases](https://github.com/plantuml/plantuml/releases) 下載 `plantuml.jar`，放到 `tools/`（已列入 `.gitignore`），然後執行：
-
-```powershell
-java -jar tools/plantuml.jar "./diagrams/*.puml"
+```bash
+npm run typecheck
 ```
 
-程式碼與圖表的一致性驗證紀錄見 [diagram-verification.md](specs/002-student-buzzer/diagram-verification.md)。
+`npm test` 依序執行 shared、後端與前端的 Vitest，其中包含設計圖一致性檢查
+（`backend/tests/architecture/diagram-consistency.test.ts`）。
+
+## 重新產生設計圖
+
+修改 `diagrams/*.puml` 後必須同步產生 PNG（憲章原則 VI）：
+
+```bash
+java -jar plantuml.jar -charset UTF-8 "./diagrams/*.puml"
+```

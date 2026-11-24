@@ -1,5 +1,5 @@
 import type { Repository } from '../data/repositories';
-import type { ClosedReason, QuestionResult, Submission } from './types';
+import type { ClosedReason, QuestionResult, Submission } from './buzzerTypes';
 
 /** 題目結束時產生結果（data-model.md QuestionResult；FR-019） */
 export class ResultService {

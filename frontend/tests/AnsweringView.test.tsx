@@ -76,7 +76,9 @@ describe('AnsweringView（FR-001、FR-014、FR-014a）', () => {
     render(<AnsweringView view={view()} clockOffset={0} offline={false} />);
     await user.type(screen.getByLabelText('你的答案'), 'x');
     await user.click(screen.getByRole('button', { name: '送出答案' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('答案最多 500 字，目前 501 字：請精簡後再送出');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('答案最多 500 字，目前 501 字');
+    expect(alert).toHaveTextContent('請精簡後再送出');
     expect(screen.getByRole('button', { name: '送出答案' })).toBeEnabled();
   });
 

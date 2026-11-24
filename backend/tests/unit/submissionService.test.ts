@@ -4,7 +4,7 @@ import { Repository } from '../../src/data/repositories';
 import { seedMockData } from '../../src/data/mock/seed';
 import { ActivityStateMachine } from '../../src/domain/activityStateMachine';
 import { SubmissionService } from '../../src/domain/submissionService';
-import type { Student } from '../../src/domain/types';
+import type { Student } from '../../src/domain/buzzerTypes';
 import { AppError } from '../../src/http/errors';
 
 const A1: Student = { studentId: 'S101', name: '王小明', teamId: 'T1' };

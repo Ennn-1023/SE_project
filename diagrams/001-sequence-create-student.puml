@@ -1,0 +1,51 @@
+@startuml 001-sequence-create-student
+title 時序圖：老師建立學生帳號（學號＋姓名）
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+autonumber
+
+actor "老師" as T
+participant "StudentCreatePanel" as P
+participant "ApiClient" as API
+participant "StudentRoutes" as R
+participant "RequireAuth /\nRequireRole(TEACHER)" as G
+participant "Validate" as V
+participant "AccountService" as AS
+participant "Config" as C
+participant "PasswordHasher" as H
+participant "UserRepository" as UR
+database "DB" as DB
+
+T -> P : 輸入學號、姓名並按「建立」
+P -> API : createStudent(studentId, name)
+API -> R : POST /students
+R -> G : 檢查登入與老師角色
+alt 未登入 / 非老師
+  G --> API : 401 / 403「此功能僅限老師使用」
+else 通過
+  R -> V : 驗證學號 4–20 英數字、姓名 1–50 字元\n(去除前後空白，學號轉大寫)
+  alt 輸入不合法
+    V --> API : AppError(400, field, message, hint)
+    API --> P : 顯示欄位錯誤
+  else 輸入合法
+    R -> AS : createStudent(input)
+    AS -> C : studentDefaultPassword
+    AS -> H : hash(預設密碼)
+    H --> AS : hash
+    AS -> UR : createStudent(studentId, name, hash)\n(groupNumber = null 未分配,\n usingDefaultPassword = true)
+    UR -> DB : INSERT（學號唯一約束）
+    alt 學號已存在
+      DB --> UR : 唯一約束衝突
+      UR --> AS : 失敗
+      AS --> API : AppError(409, "學號 X 已存在")
+      API --> P : 顯示錯誤，既有帳號不受影響
+    else 成功
+      DB --> UR : OK
+      UR --> AS : Student
+      AS --> API : 201 + 學號、姓名、組別「未分配」
+      API --> P : 顯示「已建立 學號 姓名」並更新學生清單
+    end
+  end
+end
+@enduml

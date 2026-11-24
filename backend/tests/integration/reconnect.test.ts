@@ -28,7 +28,7 @@ function freePort(): Promise<number> {
 describe('斷線後自動重連的時間（SC-006）', () => {
   it('伺服器中斷 4 秒後恢復，用前端相同的重連設定在 3 秒內收到正確的 state:update', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'buzzer-reconnect-'));
-    const env = { SQLITE_PATH: join(dir, 'buzzer.db'), PORT: String(await freePort()) };
+    const env = { DATABASE_PATH: join(dir, 'buzzer.db'), PORT: String(await freePort()) };
     try {
       t = await startTestServer(env);
       const token = await t.loginAs('S201');
@@ -36,7 +36,7 @@ describe('斷線後自動重連的時間（SC-006）', () => {
       await t.submit(token, 'Q1', '斷線前送出');
 
       // 與 frontend/src/realtime/socket.ts 完全相同的重連設定
-      const socket = io(`${t.url}/student`, { auth: { token }, transports: ['websocket'], forceNew: true, ...SOCKET_RECONNECT_OPTIONS });
+      const socket = io(`${t.url}/student`, { extraHeaders: { Cookie: token }, transports: ['websocket'], forceNew: true, ...SOCKET_RECONNECT_OPTIONS });
       await new Promise<void>((resolve) => socket.once('state:update', () => resolve()));
 
       const disconnected = new Promise<void>((resolve) => socket.once('disconnect', () => resolve()));

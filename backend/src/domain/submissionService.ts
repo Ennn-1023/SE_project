@@ -1,7 +1,7 @@
 import { validateAnswer } from '@buzzer/shared';
 import { AppError } from '../http/errors';
 import type { ActivityStateMachine } from './activityStateMachine';
-import type { Student, Submission } from './types';
+import type { Student, Submission } from './buzzerTypes';
 
 /**
  * 作答中的送出（research.md R4）。送出只存在記憶體，題目結束時才寫入資料庫。

@@ -3,7 +3,7 @@ import { openDb } from '../../src/data/db';
 import { Repository } from '../../src/data/repositories';
 import { seedMockData } from '../../src/data/mock/seed';
 import { ResultService } from '../../src/domain/resultService';
-import type { Submission } from '../../src/domain/types';
+import type { Submission } from '../../src/domain/buzzerTypes';
 
 const sub = (teamId: string, studentId: string, rank: number, answer: string, receivedAt: number): Submission => ({
   activityId: 'A1',
@@ -54,8 +54,9 @@ describe('ResultService.finalize（FR-019、FR-020）', () => {
   });
 
   it('寫入失敗時整筆交易回復：送出紀錄與結果都不會寫入', () => {
-    // 第二筆指向不存在的組別，違反外鍵限制
-    const subs = [sub('T1', 'S101', 1, 'A', 1000), sub('NOPE', 'S201', 2, 'B', 1100)];
+    // 第二筆的順位與第一筆重複，違反 UNIQUE (activity_id, question_id, rank)
+    // （整合 001 後組別來自 users.group_number，submissions.team_id 不再有外鍵）
+    const subs = [sub('T1', 'S101', 1, 'A', 1000), sub('T2', 'S201', 1, 'B', 1100)];
     expect(() => svc.finalize('A1', 'Q1', subs, 'MANUAL', 2000)).toThrow();
     expect(repo.hasResult('A1', 'Q1')).toBe(false);
     expect(repo.listSubmissions('A1', 'Q1')).toEqual([]);

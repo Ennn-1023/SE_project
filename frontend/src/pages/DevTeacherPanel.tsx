@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { phaseLabel, type TeacherStatus } from '@buzzer/shared';
 import { api, ApiError } from '../api/client';
+import { ErrorMessage } from '../components/ErrorMessage';
 
 interface QuestionItem {
   questionId: string;
@@ -128,12 +129,8 @@ export function DevTeacherPanel() {
         </button>
       </div>
 
-      {error && (
-        <p className="alert alert-error" role="alert">
-          {error.message}
-          {error.hint && `：${error.hint}`}
-        </p>
-      )}
+      {/* 與 001 頁面相同的錯誤樣式（001 FR-003）：說明原因與修正方式 */}
+      <ErrorMessage message={error?.message} hint={error?.hint} />
     </section>
   );
 }

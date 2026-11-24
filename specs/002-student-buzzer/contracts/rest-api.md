@@ -2,7 +2,9 @@
 
 - Base path：`/api`
 - 所有回應皆為 JSON（UTF-8），時間欄位為 ISO 8601。
-- 學生 API 需帶 `Authorization: Bearer <token>`。
+- 學生 API 以 001 的登入 session 驗證（HttpOnly cookie `sid`，由 `POST /api/auth/login` 取得，見 [001 openapi.yaml](../../001-foundation-auth-groups/contracts/openapi.yaml)），且只限學生角色：未登入或 session 失效回 401 `UNAUTHENTICATED`，老師呼叫回 403 `FORBIDDEN`。
+- 學生的組別由伺服器依 001 的組別指派查出（`teamId = T{組別編號}`），不接受前端傳入。
+- 錯誤格式與 001 共用：搶答錯誤碼的 `field` 一律存在（可為 null）；001 的錯誤（例如 401／403／404）沒有 `field` 時省略。
 
 ## 錯誤格式（所有錯誤共用）
 
@@ -84,21 +86,14 @@
   - 回應**不含** `rank`，避免作答中透露有多少組已經送出（FR-015）。
 - **錯誤**：400／401／403／409，見錯誤碼表。
 
-成功後，伺服器會對 `team:{teamId}` room 推播 `state:update`（見 socket-events.md）。
+成功後，伺服器會對目前屬於該組的連線推播 `state:update`（見 socket-events.md）。
 
 ---
 
 ## Dev API（僅 `ENABLE_DEV_TOOLS=true` 時掛載；否則回 404）
 
-### `GET /api/dev/students`
-
-回傳 mock 學生清單 `[{ studentId, name, teamName | null }]`，供 dev 登入頁選擇。
-
-### `POST /api/dev/login`
-
-- **Request**：`{ "studentId": "S001" }`（必填，必須存在於 mock 資料中）
-- **200**：`{ "token": "<jwt>", "student": { "studentId", "name", "teamId" } }`
-- **400**：`VALIDATION_ERROR`（field `studentId`）——缺少學號、格式錯誤，或學號不存在於 mock 資料中（message「找不到此學號」，hint「請從清單中選擇學生」）。
+> 整合 001 後已移除 `GET /api/dev/students` 與 `POST /api/dev/login`（mock 登入），學生改以 001 帳號登入。
+> 以下 dev API 需以**老師**身分登入（未登入 401、學生 403）。
 
 ### `GET /api/dev/teacher/status`
 

@@ -1,66 +1,124 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import { z } from 'zod';
+import { fieldError } from '../middleware/validate.js';
 
-/** 環境變數驗證（research.md R11、憲章原則 III）。錯誤訊息只列變數名稱，不含值。 */
-const schema = z.object({
-  SESSION_SECRET: z
-    .string({ error: '缺少必要環境變數' })
-    .min(32, { error: '長度必須至少 32 字元' }),
-  PORT: z.coerce
-    .number({ error: '必須是數字' })
-    .int({ error: '必須是整數' })
-    .min(0, { error: '必須介於 0–65535（0 表示隨機）' })
-    .max(65535, { error: '必須介於 0–65535（0 表示隨機）' })
-    .default(3000),
-  SQLITE_PATH: z.string().min(1).default('./data/buzzer.db'),
-  CLIENT_ORIGIN: z.string().min(1).default('http://localhost:5173'),
-  ENABLE_DEV_TOOLS: z
-    .enum(['true', 'false'], { error: '只能是 true 或 false' })
-    .default('false'),
-  NODE_ENV: z
-    .enum(['development', 'test', 'production'], { error: '只能是 development、test 或 production' })
-    .default('development'),
+/** 後端套件根目錄（backend/）。 */
+export const BACKEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const REPO_ROOT = path.resolve(BACKEND_ROOT, '..');
+
+/** Config（類別圖 001-class、research R10）。 */
+export interface Config {
+  studentDefaultPassword: string;
+  teacherAccount: string;
+  teacherInitialPassword: string;
+  sessionSecret: string;
+  /** 閒置逾時（毫秒） */
+  sessionIdleTimeout: number;
+  databasePath: string;
+  /** 0 表示由系統指定隨機連接埠（整合測試用） */
+  port: number;
+  nodeEnv: 'development' | 'test' | 'production';
+  /** 允許的前端來源（CORS 與 Socket.IO） */
+  clientOrigin: string;
+  /** 是否掛載模擬老師搶答操作的開發工具（002 FR-022～FR-024） */
+  enableDevTools: boolean;
+}
+
+/** 設定缺漏或格式錯誤。訊息只列變數名稱與規則，不含任何設定值（FR-001）。 */
+export class ConfigError extends Error {
+  readonly variables: string[];
+  constructor(problems: { name: string; rule: string }[]) {
+    super(
+      '環境變數設定錯誤，系統無法啟動：\n' +
+        problems.map((p) => `  - ${p.name}：${p.rule}`).join('\n') +
+        '\n請參考 .env.template 補齊 .env。',
+    );
+    this.name = 'ConfigError';
+    this.variables = problems.map((p) => p.name);
+  }
+}
+
+/** 空字串視為未設定，讓 .env.template 中留空的選填變數使用預設值。 */
+const optional = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), schema);
+
+const intString = (min: number, max: number) =>
+  z
+    .string()
+    .regex(/^\d+$/, `須為 ${min}–${max} 的整數`)
+    .transform(Number)
+    .refine((n) => n >= min && n <= max, `須為 ${min}–${max} 的整數`);
+
+const envSchema = z.object({
+  STUDENT_DEFAULT_PASSWORD: optional(
+    z
+      .string(fieldError('必填', '須為文字'))
+      .min(4, '長度須為 4–64 字元')
+      .max(64, '長度須為 4–64 字元'),
+  ),
+  TEACHER_INITIAL_PASSWORD: optional(
+    z
+      .string(fieldError('必填', '須為文字'))
+      .min(8, '長度須為 8–64 字元')
+      .max(64, '長度須為 8–64 字元'),
+  ),
+  SESSION_SECRET: optional(z.string(fieldError('必填', '須為文字')).min(32, '長度須至少 32 字元')),
+  TEACHER_ACCOUNT: optional(
+    z
+      .string()
+      .regex(/^[A-Za-z0-9]{4,20}$/, '須為 4–20 個英文字母或數字')
+      .default('teacher'),
+  ),
+  DATABASE_PATH: optional(z.string().default('./data/app.db')),
+  PORT: optional(intString(0, 65535).default(3000)),
+  SESSION_IDLE_MINUTES: optional(intString(5, 1440).default(120)),
+  NODE_ENV: optional(
+    z
+      .enum(['development', 'test', 'production'], {
+        error: '須為 development、test 或 production',
+      })
+      .default('development'),
+  ),
+  CLIENT_ORIGIN: optional(z.string().default('http://localhost:5173')),
+  ENABLE_DEV_TOOLS: optional(
+    z.enum(['true', 'false'], { error: '須為 true 或 false' }).default('false'),
+  ),
 });
 
-export interface Config {
-  sessionSecret: string;
-  port: number;
-  sqlitePath: string;
-  clientOrigin: string;
-  enableDevTools: boolean;
-  nodeEnv: 'development' | 'test' | 'production';
-}
-
-export class EnvError extends Error {
-  constructor(public readonly problems: string[]) {
-    super(`環境變數設定錯誤：\n${problems.map((p) => `  - ${p}`).join('\n')}\n請參考 .env.template 設定 .env。`);
-    this.name = 'EnvError';
-  }
-}
-
-export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
-  // 空字串視為未設定
-  const cleaned = Object.fromEntries(
-    Object.entries(env).filter(([, v]) => v !== undefined && v !== ''),
-  );
-  const parsed = schema.safeParse(cleaned);
+function load(env: Record<string, string | undefined>): Config {
+  const parsed = envSchema.safeParse(env);
   if (!parsed.success) {
-    const problems = parsed.error.issues.map((i) => {
-      const name = String(i.path[0] ?? '環境變數');
-      const reason = i.code === 'invalid_type' && i.input === undefined ? '缺少必要環境變數' : i.message;
-      return `${name}：${reason}`;
-    });
-    throw new EnvError(problems);
+    const problems = parsed.error.issues.map((issue) => ({
+      name: String(issue.path[0]),
+      rule: issue.message,
+    }));
+    throw new ConfigError(problems);
   }
-  const d = parsed.data;
-  if (d.NODE_ENV === 'production' && d.ENABLE_DEV_TOOLS === 'true') {
-    throw new EnvError(['ENABLE_DEV_TOOLS：production 環境不得啟用開發工具']);
+  const e = parsed.data;
+  if (e.NODE_ENV === 'production' && e.ENABLE_DEV_TOOLS === 'true') {
+    throw new ConfigError([{ name: 'ENABLE_DEV_TOOLS', rule: 'production 環境不得啟用開發工具' }]);
   }
+  const databasePath =
+    e.DATABASE_PATH === ':memory:' ? ':memory:' : path.resolve(BACKEND_ROOT, e.DATABASE_PATH);
   return {
-    sessionSecret: d.SESSION_SECRET,
-    port: d.PORT,
-    sqlitePath: d.SQLITE_PATH,
-    clientOrigin: d.CLIENT_ORIGIN,
-    enableDevTools: d.ENABLE_DEV_TOOLS === 'true',
-    nodeEnv: d.NODE_ENV,
+    studentDefaultPassword: e.STUDENT_DEFAULT_PASSWORD,
+    teacherAccount: e.TEACHER_ACCOUNT,
+    teacherInitialPassword: e.TEACHER_INITIAL_PASSWORD,
+    sessionSecret: e.SESSION_SECRET,
+    sessionIdleTimeout: e.SESSION_IDLE_MINUTES * 60_000,
+    databasePath,
+    port: e.PORT,
+    nodeEnv: e.NODE_ENV,
+    clientOrigin: e.CLIENT_ORIGIN,
+    enableDevTools: e.ENABLE_DEV_TOOLS === 'true',
   };
 }
+
+/** 開發時從專案根目錄的 .env 載入環境變數（不覆蓋已存在的變數）。 */
+function loadDotenv(): void {
+  dotenv.config({ path: path.join(REPO_ROOT, '.env'), quiet: true });
+}
+
+export const Config = { load, loadDotenv };

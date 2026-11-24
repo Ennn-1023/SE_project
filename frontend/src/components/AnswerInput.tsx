@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { MAX_ANSWER_LENGTH, countChars, validateAnswer } from '@buzzer/shared';
 import { api, ApiError } from '../api/client';
+import { ErrorMessage } from './ErrorMessage';
 
 interface Props {
   questionId: string;
@@ -83,12 +84,8 @@ export function AnswerInput({ questionId, offline, onSubmitted }: Props) {
           </p>
         )}
       </div>
-      {error && (
-        <p className="alert alert-error" role="alert">
-          {error.message}
-          {error.hint && `：${error.hint}`}
-        </p>
-      )}
+      {/* 與 001 頁面相同的錯誤樣式（001 FR-003）：說明原因與修正方式 */}
+      <ErrorMessage message={error?.message} hint={error?.hint} />
       <button type="submit" className="btn btn-accent btn-block" disabled={!canSubmit}>
         {busy ? '送出中…' : '送出答案'}
       </button>

@@ -1,15 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
-import { tokenStore } from '../src/api/client';
+import { MemoryRouter } from 'react-router';
 import { StudentPage } from '../src/pages/StudentPage';
 import { answeringView, createFakeSocket, json, routeFetch } from './helpers';
 
 const err = (code: string, message: string, hint: string, status = 409) =>
   json({ error: { code, field: null, message, hint } }, status);
 
-beforeEach(() => tokenStore.set('tok'));
 afterEach(() => vi.unstubAllGlobals());
 
 async function renderAnswering(postResponse: () => Response) {

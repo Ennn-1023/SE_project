@@ -1,0 +1,39 @@
+/* UI 風格系統（組件圖：米白色系 / 撞色按鈕 tokens；research R12）。所有頁面只使用這些 token。 */
+@import 'tailwindcss';
+/*
+ * 搶答頁（002）的 tokens 與元件樣式。放進較低的 cascade layer，讓 Tailwind utilities 永遠優先，
+ * 也避免其元素選擇器（h1、body…）蓋過 001 頁面。兩邊色票同名同值：primary 深藍、accent 珊瑚橘。
+ */
+@import './tokens.css' layer(base);
+@import './global.css' layer(components);
+
+@theme {
+  --color-cream-50: #faf7f0;
+  --color-cream-100: #f5f0e6;
+  --color-cream-300: #e6dcc8;
+  --color-ink: #2b2a28;
+  --color-primary: #1f3a93;
+  --color-accent: #ff6b4a;
+  --color-danger: #b42318;
+}
+
+html,
+body {
+  background-color: var(--color-cream-50);
+  color: var(--color-ink);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  overflow-x: hidden;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    'Noto Sans TC',
+    'PingFang TC',
+    'Microsoft JhengHei',
+    sans-serif;
+  line-height: 1.5;
+}

@@ -9,7 +9,7 @@ import type {
   Student,
   Submission,
   Team,
-} from '../domain/types';
+} from '../domain/buzzerTypes';
 
 type Row = Record<string, unknown>;
 
@@ -27,16 +27,22 @@ const toQuestion = (r: Row): Question => ({
   text: String(r.text),
 });
 
-const toTeam = (r: Row): Team => ({
-  teamId: String(r.team_id),
-  activityId: String(r.activity_id),
-  name: String(r.name),
+/** 組別編號 n ↔ 搶答的 teamId `T{n}`（整合 001 組別管理：組別即 users.group_number）。 */
+export const teamIdOf = (groupNumber: number) => `T${groupNumber}`;
+export function groupNumberOf(teamId: string): number | null {
+  const m = /^T([1-9]\d*)$/.exec(teamId);
+  return m ? Number(m[1]) : null;
+}
+const teamOf = (groupNumber: number, activityId: string): Team => ({
+  teamId: teamIdOf(groupNumber),
+  activityId,
+  name: `第 ${groupNumber} 組`,
 });
 
 const toStudent = (r: Row): Student => ({
-  studentId: String(r.student_id),
-  name: String(r.name),
-  teamId: (r.team_id as string | null) ?? null,
+  studentId: String(r.account),
+  name: String(r.display_name),
+  teamId: r.group_number == null ? null : teamIdOf(Number(r.group_number)),
 });
 
 const toSubmission = (r: Row): Submission => ({
@@ -102,40 +108,42 @@ export class Repository {
     ).map(toQuestion);
   }
 
-  getTeam(teamId: string): Team | null {
-    const row = this.db.prepare(`SELECT * FROM teams WHERE team_id = ?`).get(teamId) as
+  private groupCount(): number {
+    const row = this.db.prepare(`SELECT group_count FROM group_settings WHERE id = 1`).get() as
       | Row
       | undefined;
-    return row ? toTeam(row) : null;
+    return row ? Number(row.group_count) : 0;
+  }
+
+  /** 組別來自 001 的組數設定：第 1..N 組；超出目前組數的 teamId 視為不存在 */
+  getTeam(teamId: string): Team | null {
+    const n = groupNumberOf(teamId);
+    if (n === null || n > this.groupCount()) return null;
+    return teamOf(n, this.getCurrentActivity()?.id ?? '');
   }
 
   listTeams(activityId: string): Team[] {
-    return (
-      this.db.prepare(`SELECT * FROM teams WHERE activity_id = ? ORDER BY team_id`).all(activityId) as Row[]
-    ).map(toTeam);
+    return Array.from({ length: this.groupCount() }, (_, i) => teamOf(i + 1, activityId));
   }
 
+  /** 學生來自 001 的 users（role = STUDENT）；studentId 即學號（大寫） */
   getStudent(studentId: string): Student | null {
-    const row = this.db.prepare(`SELECT * FROM students WHERE student_id = ?`).get(studentId) as
-      | Row
-      | undefined;
+    const row = this.db
+      .prepare(
+        `SELECT account, display_name, group_number FROM users WHERE role = 'STUDENT' AND account = ?`,
+      )
+      .get(studentId.trim().toUpperCase()) as Row | undefined;
     return row ? toStudent(row) : null;
   }
 
   listStudents(): Student[] {
-    return (this.db.prepare(`SELECT * FROM students ORDER BY student_id`).all() as Row[]).map(toStudent);
-  }
-
-  insertTeam(t: Team): void {
-    this.db
-      .prepare(`INSERT INTO teams (team_id, activity_id, name) VALUES (?, ?, ?)`)
-      .run(t.teamId, t.activityId, t.name);
-  }
-
-  insertStudent(s: Student): void {
-    this.db
-      .prepare(`INSERT INTO students (student_id, name, team_id) VALUES (?, ?, ?)`)
-      .run(s.studentId, s.name, s.teamId);
+    return (
+      this.db
+        .prepare(
+          `SELECT account, display_name, group_number FROM users WHERE role = 'STUDENT' ORDER BY account`,
+        )
+        .all() as Row[]
+    ).map(toStudent);
   }
 
   insertQuestion(q: Question): void {

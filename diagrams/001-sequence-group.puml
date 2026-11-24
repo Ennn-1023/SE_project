@@ -1,0 +1,76 @@
+@startuml 001-sequence-group
+title 時序圖：學生自選組別與老師調整組別
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+autonumber
+
+actor "學生" as S
+actor "老師" as T
+participant "StudentHome" as SH
+participant "GroupManagePanel" as GM
+participant "GroupRoutes" as R
+participant "RequireAuth /\nRequireRole" as G
+participant "GroupService" as GS
+participant "GroupSettingsRepository" as GR
+participant "UserRepository" as UR
+database "DB" as DB
+
+== 老師設定組數 ==
+T -> GM : 設定組數 N
+GM -> R : PUT /groups/settings {groupCount: N}
+R -> G : 老師角色檢查
+R -> R : Validate：N 為 0–50 的整數（否則 400）
+R -> GS : setGroupCount(N)
+GS -> UR : 於交易內查詢 groupNumber > N 的學生
+alt 被移除的組別仍有成員
+  GS --> R : AppError(409, "第 k 組仍有成員：...，請先移出")
+else 可調整
+  GS -> GR : 儲存 groupCount = N
+  GS --> R : GroupSettings
+end
+
+== 學生自選組別（僅限未分配） ==
+S -> SH : 開啟首頁
+SH -> R : GET /groups/me
+R -> GS : getMyGroup(studentId)
+GS --> SH : MyGroupView(groupNumber?, N)
+alt N == 0
+  SH --> S : 顯示「老師尚未開放分組」
+else 已分組
+  SH --> S : 顯示「你在第 g 組」（無選組按鈕）
+else 未分配
+  S -> SH : 選擇第 g 組
+  SH -> R : POST /groups/me {groupNumber: g}
+  R -> G : 學生角色檢查
+  R -> R : Validate：g 為正整數（否則 400，附最新組數）
+  R -> GS : selfSelect(studentId, g)
+  alt N == 0（送出前老師已關閉分組）
+    GS --> R : AppError(409, GROUPS_NOT_OPEN, "老師尚未開放分組")
+  else g 不在 1..N
+    GS --> R : AppError(400, VALIDATION_ERROR, "可選範圍為 1–N", groupCount = N)
+  else 範圍正確
+    GS -> UR : updateGroupIfUnassigned(studentId, g)
+    UR -> DB : UPDATE ... SET group = g\nWHERE id = ? AND group IS NULL
+    alt 影響 0 筆（已被老師指派或已選過）
+      GS --> R : AppError(409, ALREADY_ASSIGNED, "你已分組，如需更換請洽老師", 目前組別)
+    else 成功
+      GS --> R : Student(groupNumber = g)
+      R --> SH : 200
+      SH --> S : 顯示「你在第 g 組」
+    end
+  end
+end
+
+== 老師調整學生組別 ==
+T -> GM : 將學生甲改到第 g 組 / 改回未分配
+GM -> R : PUT /groups/assignments/{studentId} {groupNumber: g | null}
+R -> G : 老師角色檢查
+R -> R : Validate：學號格式、g 為正整數或 null（否則 400）
+R -> GS : assign(studentId, g)
+GS -> GS : 學生存在（否則 404）且 g 為 null 或 g ≤ N（否則 400）
+GS -> UR : updateGroup(studentId, g)
+UR -> DB : UPDATE
+GS --> R : Student
+R --> GM : 200 → 重新整理組別總覽
+@enduml

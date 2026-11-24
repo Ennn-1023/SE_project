@@ -42,14 +42,16 @@ export function studentReducer(state: StudentState, action: Action): StudentStat
   }
 }
 
-export type SocketFactory = (token: string) => StudentSocket;
+export type SocketFactory = () => StudentSocket;
 
 /** REST 取回目前狀態 + 訂閱 state:update（research.md R9） */
-export function useStudentState(token: string | null, socketFactory: SocketFactory = createStudentSocket) {
+/** 預設的 socket 工廠（模組層級常數，避免每次 render 產生新函式而重複連線） */
+const defaultSocketFactory: SocketFactory = () => createStudentSocket();
+
+export function useStudentState(socketFactory: SocketFactory = defaultSocketFactory) {
   const [state, dispatch] = useReducer(studentReducer, initialStudentState);
 
   useEffect(() => {
-    if (!token) return;
     let active = true;
     const applyView = (view: StudentView) => {
       if (active) dispatch({ type: 'view', view, receivedAt: Date.now() });
@@ -61,7 +63,7 @@ export function useStudentState(token: string | null, socketFactory: SocketFacto
           if (active && e instanceof ApiError && e.status === 401) dispatch({ type: 'authError' });
         });
 
-    const socket = socketFactory(token);
+    const socket = socketFactory();
     const offState = socket.onState(applyView);
     const offConn = socket.onConnectionChange((status, reason) => {
       if (!active) return;
@@ -77,7 +79,7 @@ export function useStudentState(token: string | null, socketFactory: SocketFacto
       offConn();
       socket.disconnect();
     };
-  }, [token, socketFactory]);
+  }, [socketFactory]);
 
   return state;
 }

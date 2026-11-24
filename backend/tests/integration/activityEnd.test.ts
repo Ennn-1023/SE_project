@@ -39,7 +39,7 @@ describe('活動結束（US5）', () => {
     await t.teacher.end();
     await c.waitFor((v) => v.phase === 'ENDED');
 
-    const results = (await t.http.get('/api/dev/results')).body;
+    const results = (await t.http.get('/api/dev/results').set('Cookie', t.teacherCookie)).body;
     expect(results).toEqual([expect.objectContaining({ question_id: 'Q1', winner_team: 'T2' })]);
     const reason = t.server.ctx.repo.getResult('A1', 'Q1')?.closedReason;
     expect(reason).toBe('ACTIVITY_ENDED');

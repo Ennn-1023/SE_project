@@ -1,9 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import type { StudentView } from '@buzzer/shared';
-import { tokenStore } from '../src/api/client';
 import { StudentPage } from '../src/pages/StudentPage';
 import { answeringView, createFakeSocket, json, routeFetch } from './helpers';
 
@@ -15,10 +14,10 @@ const waiting = (t: number): StudentView => ({ phase: 'WAITING', serverNow: at(t
 function renderPage() {
   const sock = createFakeSocket();
   render(
-    <MemoryRouter initialEntries={['/']}>
+    <MemoryRouter initialEntries={['/student/buzzer']}>
       <Routes>
-        <Route path="/" element={<StudentPage socketFactory={sock.factory} />} />
-        <Route path="/dev" element={<p>dev 登入頁</p>} />
+        <Route path="/student/buzzer" element={<StudentPage socketFactory={sock.factory} />} />
+        <Route path="/login" element={<p>登入頁</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -26,7 +25,6 @@ function renderPage() {
 }
 
 describe('StudentPage 階段切換（FR-001、Q-T17、Edge Cases「連續多題」）', () => {
-  beforeEach(() => tokenStore.set('tok'));
 
   it('四種階段依序切換，下一題不會帶到上一題的已送出狀態與草稿', async () => {
     vi.stubGlobal('fetch', routeFetch({ 'GET /api/student/state': () => json(waiting(-60_000)) }));
@@ -73,10 +71,16 @@ describe('StudentPage 階段切換（FR-001、Q-T17、Edge Cases「連續多題�
   });
 });
 
-describe('StudentPage 沒有登入', () => {
-  it('沒有 token 時導向 /dev', () => {
-    tokenStore.clear();
+describe('StudentPage 登入失效', () => {
+  it('取回狀態得到 401 時導向 /login', async () => {
+    vi.stubGlobal(
+      'fetch',
+      routeFetch({
+        'GET /api/student/state': () =>
+          json({ error: { code: 'UNAUTHENTICATED', message: '請先登入', hint: '請回到登入頁重新登入' } }, 401),
+      }),
+    );
     renderPage();
-    expect(screen.getByText('dev 登入頁')).toBeInTheDocument();
+    expect(await screen.findByText('登入頁')).toBeInTheDocument();
   });
 });

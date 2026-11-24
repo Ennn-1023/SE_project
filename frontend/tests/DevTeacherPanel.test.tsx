@@ -75,9 +75,9 @@ describe('DevTeacherPanel（US6）', () => {
     render(<DevTeacherPanel />);
     await screen.findByText('等待開放');
     await user.click(screen.getByRole('button', { name: '下一題' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '目前階段（等待開放）不能執行「下一題」：只有在「已結束」階段可以執行',
-    );
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('目前階段（等待開放）不能執行「下一題」');
+    expect(alert).toHaveTextContent('只有在「已結束」階段可以執行');
   });
 
   it('秒數超出 5–600 時前端提示並停用開放按鈕', async () => {
