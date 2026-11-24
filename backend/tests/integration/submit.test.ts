@@ -19,10 +19,15 @@ describe('POST /api/student/submissions', () => {
 
     const res = await t.submit(token, 'Q1', '  SYN → SYN-ACK → ACK  ');
     expect(res.status).toBe(201);
-    expect(res.body).toEqual({ questionId: 'Q1', teamId: 'T2', answer: 'SYN → SYN-ACK → ACK' });
+    expect(res.body).toEqual({
+      questionId: 'Q1',
+      teamId: 'T2',
+      answer: 'SYN → SYN-ACK → ACK',
+      answers: [{ partIndex: 0, partLabel: null, answer: 'SYN → SYN-ACK → ACK' }],
+    });
     expect(res.body).not.toHaveProperty('rank');
 
-    expect((await pushed).myTeamSubmission).toEqual({ answer: 'SYN → SYN-ACK → ACK' });
+    expect((await pushed).myTeamSubmission).toMatchObject({ answer: 'SYN → SYN-ACK → ACK' });
     await tab1.waitFor((v) => v.myTeamSubmission != null);
   });
 

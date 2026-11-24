@@ -131,3 +131,75 @@ describe('migration version 3（data-model.md §1）', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM answer_slots').get()).toEqual({ n: 0 });
   });
 });
+
+describe('migration version 4（004 data-model.md §1）', () => {
+  /** 建立只有 v1～v3 的舊資料庫，放入 002 的 mock 活動、一題已結束的結果 */
+  function legacyDb() {
+    const db = openDatabase(':memory:');
+    migrate(db, new Date('2026-01-05T08:00:00Z'), 3);
+    db.exec(`
+      INSERT INTO activities (id, phase, current_question_id, ends_at, updated_at) VALUES ('A1', 'CLOSED', 'Q1', NULL, 1);
+      INSERT INTO questions (question_id, activity_id, number, text) VALUES ('Q1', 'A1', 1, '題目一'), ('Q2', 'A1', 2, '題目二');
+      INSERT INTO submissions (activity_id, question_id, team_id, student_id, answer, received_at, rank)
+        VALUES ('A1', 'Q1', 'T2', 'S201', '答案二', 10, 1), ('A1', 'Q1', 'T1', 'S101', '答案一', 20, 2);
+      INSERT INTO question_results (activity_id, question_id, answer, winner_team, submitted_at, closed_reason, closed_at)
+        VALUES ('A1', 'Q1', '答案二', 'T2', 10, 'MANUAL', 30);
+    `);
+    return db;
+  }
+
+  it('升級後舊資料為第 1 輪、未作廢，A1 標為結束，題目與小題回填（正常）', () => {
+    const db = legacyDb();
+    expect(migrate(db, new Date('2026-11-24T00:00:00Z'))).toEqual([4]);
+    expect(db.prepare(`SELECT phase, ended_at FROM activities WHERE id = 'A1'`).get()).toEqual({
+      phase: 'ENDED',
+      ended_at: Date.parse('2026-11-24T00:00:00Z'),
+    });
+    expect(
+      db.prepare(`SELECT round, voided FROM submissions ORDER BY rank`).all(),
+    ).toEqual([
+      { round: 1, voided: 0 },
+      { round: 1, voided: 0 },
+    ]);
+    expect(
+      db.prepare(`SELECT question_id, status, current_round, label FROM questions ORDER BY number`).all(),
+    ).toEqual([
+      { question_id: 'Q1', status: 'CLOSED', current_round: 1, label: '1' },
+      { question_id: 'Q2', status: 'NOT_OPENED', current_round: 0, label: '2' },
+    ]);
+    expect(db.prepare(`SELECT COUNT(*) AS n FROM question_parts`).get()).toEqual({ n: 2 });
+    expect(db.prepare(`SELECT answer FROM result_parts`).all()).toEqual([{ answer: '答案二' }]);
+    expect(migrate(db)).toEqual([]);
+  });
+
+  it('同一題只能有一筆未作廢的結果（question_results.voided 部分唯一索引，邊界）', () => {
+    const db = legacyDb();
+    migrate(db);
+    const insert = (round: number, voided: number) =>
+      db
+        .prepare(
+          `INSERT INTO question_results (activity_id, question_id, round, closed_reason, closed_at, voided)
+           VALUES ('A1', 'Q1', ?, 'TIME_UP', 1, ?)`,
+        )
+        .run(round, voided);
+    expect(() => insert(2, 0)).toThrow();
+    db.prepare(`UPDATE question_results SET voided = 1 WHERE round = 1`).run();
+    expect(() => insert(2, 0)).not.toThrow();
+  });
+
+  it('作答秒數與小題答案長度的 CHECK 約束（questions.seconds、submission_parts.answer，邊界）', () => {
+    const db = legacyDb();
+    migrate(db);
+    expect(() => db.prepare(`UPDATE questions SET seconds = 4 WHERE question_id = 'Q2'`).run()).toThrow();
+    expect(() => db.prepare(`UPDATE questions SET seconds = 600 WHERE question_id = 'Q2'`).run()).not.toThrow();
+    const part = (answer: string) =>
+      db
+        .prepare(
+          `INSERT INTO submission_parts (activity_id, question_id, round, team_id, part_index, answer)
+           VALUES ('A1', 'Q2', 1, 'T9', 0, ?)`,
+        )
+        .run(answer);
+    expect(() => part('a'.repeat(501))).toThrow();
+    expect(() => part('')).toThrow();
+  });
+});

@@ -107,3 +107,67 @@ describe('窄螢幕的標註面板', () => {
     await waitFor(() => expect(body().className).toContain('hidden'));
   });
 });
+
+// ---------- 004 活動頁（SC-009、FR-033） ----------
+import { ActivityControlPage } from '../src/pages/ActivityControlPage';
+import { createFakeTeacherSocket, detail, listItem, row, submitted, teacherView } from './activityFixtures';
+
+describe('活動頁版面（004 SC-009、FR-033）', () => {
+  function renderActivity(teams: number) {
+    const rows = Array.from({ length: teams }, (_, i) =>
+      i < 3 ? submitted(`T${i + 1}`, i + 1, '很長的答案'.repeat(60)) : row(`T${i + 1}`),
+    );
+    vi.spyOn(api, 'getActivity').mockResolvedValue(
+      teacherView({
+        phase: 'ANSWERING',
+        current: detail(1),
+        endsAt: new Date(Date.now() + 30_000).toISOString(),
+        questions: [listItem(1, { status: 'ANSWERING', round: 1 }), listItem(2), listItem(3)],
+        monitor: {
+          questionId: 'ACT-1-1',
+          round: 1,
+          submittedCount: 3,
+          teamCount: teams,
+          allSubmitted: false,
+          teams: rows,
+        },
+      }),
+    );
+    const sock = createFakeTeacherSocket();
+    const view = renderAt('/teacher/activity', <ActivityControlPage socketFactory={sock.factory} />);
+    sock.connection('online');
+    return view;
+  }
+
+  it.each([10, 50])('%s 組：全部組別可瀏覽；版面為 mobile-first 單欄、桌機才分兩欄', async (teams) => {
+    const { container } = renderActivity(teams);
+    expect(await screen.findByTestId(`team-T${teams}`)).toBeInTheDocument();
+    expect(screen.getAllByRole('listitem').filter((li) => li.dataset.testid?.startsWith('team-'))).toHaveLength(teams);
+    const columns = container.querySelector('[class~="lg:flex-row-reverse"]');
+    expect(columns?.className).toContain('flex-col');
+    // 沒有寬度超過手機的固定寬度（只允許 lg: 斷點下的側欄寬度）
+    for (const el of container.querySelectorAll('[class]')) {
+      const fixed = el.className.toString().split(/\s+/).filter((c) => /^(min-)?w-(\d{3,}|\[\d+px\])/.test(c));
+      expect(fixed, el.className.toString()).toEqual([]);
+    }
+  });
+
+  it('所有按鈕觸控區至少 44px（min-h-11），破壞性操作與主要操作使用不同樣式', async () => {
+    renderActivity(10);
+    await screen.findByTestId('team-T10');
+    for (const button of screen.getAllByRole('button')) {
+      expect(button.className, button.textContent ?? '').toMatch(/min-h-11/);
+    }
+    expect(screen.getByRole('button', { name: '結束搶答' })).toHaveAttribute('data-variant', 'danger');
+    expect(screen.getByRole('button', { name: '結束活動' })).toHaveAttribute('data-variant', 'danger');
+  });
+
+  it('長答案自動換行並可收合（不造成水平捲動）', async () => {
+    renderActivity(10);
+    await screen.findByTestId('team-T10');
+    for (const text of screen.getAllByTestId('answer-text')) {
+      expect(text.querySelector('p')?.className).toContain('break-words');
+    }
+    expect(screen.getAllByRole('button', { name: '展開完整答案' }).length).toBeGreaterThan(0);
+  });
+});

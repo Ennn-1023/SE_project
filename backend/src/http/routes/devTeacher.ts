@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { QuestionResultDto } from '@buzzer/shared';
 import type { AppContext } from '../../context';
+import { createMockActivity } from '../../data/mock/seed';
 import { AppError, parseOrThrow } from '../errors';
 
 const openSchema = z.object({
@@ -9,16 +10,26 @@ const openSchema = z.object({
   seconds: z.unknown().optional(),
 });
 
-/** dev 專用模擬老師操作（FR-022、FR-023）；只在 ENABLE_DEV_TOOLS=true 時掛載 */
+/** dev 專用模擬老師操作（002 FR-022、FR-023；004 FR-032）；只在 ENABLE_DEV_TOOLS=true 時掛載 */
 export function devTeacherRouter(ctx: AppContext): Router {
   const r = Router();
   const { machine } = ctx;
 
   r.get('/status', (_req, res) => {
-    const questions = ctx.repo
-      .listQuestions(machine.activity.id)
-      .map(({ questionId, number, text }) => ({ questionId, number, text }));
+    const activity = machine.activity;
+    const questions = activity
+      ? ctx.repo
+          .listQuestions(activity.id)
+          .map(({ questionId, number, text }) => ({ questionId, number, text }))
+      : [];
     res.json({ ...machine.status(), questions });
+  });
+
+  /** 以 mock 題目開始一場活動（取代 002 啟動時的自動 seed） */
+  r.post('/mock-activity', (_req, res) => {
+    if (ctx.repo.hasRunningActivity()) throw new AppError('ACTIVITY_ALREADY_RUNNING');
+    machine.start(createMockActivity(ctx.repo));
+    res.json(machine.status());
   });
 
   r.post('/open', (req, res) => {
@@ -40,8 +51,8 @@ export function devTeacherRouter(ctx: AppContext): Router {
     res.json(machine.status());
   });
 
-  r.post('/next', (_req, res) => {
-    machine.next();
+  r.post('/back-to-waiting', (_req, res) => {
+    machine.backToWaiting();
     res.json(machine.status());
   });
 
@@ -64,12 +75,13 @@ const submissionsQuery = z.object({
   questionId: z.string().trim().min(1, { error: '不可為空' }).max(64, { error: '最多 64 字元' }),
 });
 
-/** dev 專用：讀取結果與送出紀錄（FR-019、FR-020）；不對學生開放 */
+/** dev 專用：讀取有效結果與送出紀錄（002 FR-019、FR-020）；不對學生開放 */
 export function devResultsRouter(ctx: AppContext): Router {
   const r = Router();
+  const activityId = () => ctx.machine.activity?.id ?? '';
 
   r.get('/results', (_req, res) => {
-    const list: QuestionResultDto[] = ctx.repo.listResults(ctx.machine.activity.id).map((x) => ({
+    const list: QuestionResultDto[] = ctx.repo.listResults(activityId()).map((x) => ({
       question_id: x.questionId,
       answer: x.answer,
       winner_team: x.winnerTeam,
@@ -81,7 +93,7 @@ export function devResultsRouter(ctx: AppContext): Router {
   r.get('/submissions', (req, res) => {
     const { questionId } = parseOrThrow(submissionsQuery, req.query);
     res.json(
-      ctx.repo.listSubmissions(ctx.machine.activity.id, questionId).map((s) => ({
+      ctx.repo.listSubmissions(activityId(), questionId).map((s) => ({
         question_id: s.questionId,
         team_id: s.teamId,
         student_id: s.studentId,

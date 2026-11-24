@@ -192,9 +192,142 @@ const MIGRATIONS: { version: number; up: (db: Database, now: string) => void }[]
       `);
     },
   },
+  {
+    // 004-activity-control-monitor（specs/004-activity-control-monitor/data-model.md §1）：
+    // 活動生命週期、活動題目（快照）、小題、參與組別、輪次與作廢、活動事件。
+    version: 4,
+    up: (db, now) => {
+      const nowMs = Date.parse(now);
+      db.exec(`
+        ALTER TABLE activities ADD COLUMN opened_at INTEGER;
+        ALTER TABLE activities ADD COLUMN started_at INTEGER;
+        ALTER TABLE activities ADD COLUMN started_by INTEGER;
+        ALTER TABLE activities ADD COLUMN ended_at INTEGER;
+        ALTER TABLE activities ADD COLUMN source_title TEXT;
+        ALTER TABLE activities ADD COLUMN notice TEXT;
+
+        ALTER TABLE questions ADD COLUMN label TEXT CHECK (label IS NULL OR length(label) BETWEEN 1 AND 20);
+        ALTER TABLE questions ADD COLUMN kind TEXT NOT NULL DEFAULT 'SINGLE' CHECK (kind IN ('SINGLE','GROUP'));
+        ALTER TABLE questions ADD COLUMN stem TEXT;
+        ALTER TABLE questions ADD COLUMN question_key TEXT;
+        ALTER TABLE questions ADD COLUMN status TEXT NOT NULL DEFAULT 'NOT_OPENED'
+          CHECK (status IN ('NOT_OPENED','ANSWERING','CLOSED'));
+        ALTER TABLE questions ADD COLUMN current_round INTEGER NOT NULL DEFAULT 0 CHECK (current_round >= 0);
+        ALTER TABLE questions ADD COLUMN seconds INTEGER CHECK (seconds IS NULL OR seconds BETWEEN 5 AND 600);
+        ALTER TABLE questions ADD COLUMN opened_at INTEGER;
+        ALTER TABLE questions ADD COLUMN closed_at INTEGER;
+        ALTER TABLE questions ADD COLUMN closed_reason TEXT
+          CHECK (closed_reason IS NULL OR closed_reason IN ('TIME_UP','MANUAL','ACTIVITY_ENDED'));
+
+        UPDATE questions SET label = CAST(number AS TEXT);
+
+        CREATE TABLE question_parts (
+          question_id   TEXT NOT NULL REFERENCES questions(question_id),
+          part_index    INTEGER NOT NULL CHECK (part_index BETWEEN 0 AND 9),
+          part_label    TEXT,
+          question_text TEXT NOT NULL CHECK (length(question_text) BETWEEN 1 AND 2000),
+          PRIMARY KEY (question_id, part_index)
+        );
+        INSERT INTO question_parts (question_id, part_index, part_label, question_text)
+          SELECT question_id, 0, NULL, substr(text, 1, 2000) FROM questions;
+
+        CREATE TABLE question_participants (
+          activity_id  TEXT NOT NULL,
+          question_id  TEXT NOT NULL,
+          round        INTEGER NOT NULL CHECK (round >= 1),
+          team_id      TEXT NOT NULL,
+          member_count INTEGER NOT NULL CHECK (member_count >= 1),
+          PRIMARY KEY (activity_id, question_id, round, team_id)
+        );
+
+        CREATE TABLE submissions_v4 (
+          activity_id TEXT NOT NULL,
+          question_id TEXT NOT NULL REFERENCES questions(question_id),
+          round       INTEGER NOT NULL DEFAULT 1 CHECK (round >= 1),
+          team_id     TEXT NOT NULL,
+          student_id  TEXT NOT NULL,
+          answer      TEXT NOT NULL CHECK (length(answer) > 0),
+          received_at INTEGER NOT NULL,
+          rank        INTEGER NOT NULL CHECK (rank >= 1),
+          voided      INTEGER NOT NULL DEFAULT 0 CHECK (voided IN (0,1)),
+          PRIMARY KEY (activity_id, question_id, round, team_id),
+          UNIQUE (activity_id, question_id, round, rank)
+        );
+        INSERT INTO submissions_v4 (activity_id, question_id, round, team_id, student_id, answer, received_at, rank, voided)
+          SELECT activity_id, question_id, 1, team_id, student_id, answer, received_at, rank, 0 FROM submissions;
+        DROP TABLE submissions;
+        ALTER TABLE submissions_v4 RENAME TO submissions;
+
+        CREATE TABLE submission_parts (
+          activity_id TEXT NOT NULL,
+          question_id TEXT NOT NULL,
+          round       INTEGER NOT NULL CHECK (round >= 1),
+          team_id     TEXT NOT NULL,
+          part_index  INTEGER NOT NULL CHECK (part_index BETWEEN 0 AND 9),
+          answer      TEXT NOT NULL CHECK (length(answer) BETWEEN 1 AND 500),
+          PRIMARY KEY (activity_id, question_id, round, team_id, part_index)
+        );
+        INSERT INTO submission_parts (activity_id, question_id, round, team_id, part_index, answer)
+          SELECT activity_id, question_id, 1, team_id, 0, answer FROM submissions;
+
+        CREATE TABLE question_results_v4 (
+          activity_id   TEXT NOT NULL,
+          question_id   TEXT NOT NULL REFERENCES questions(question_id),
+          round         INTEGER NOT NULL DEFAULT 1 CHECK (round >= 1),
+          answer        TEXT,
+          winner_team   TEXT,
+          submitted_at  INTEGER,
+          closed_reason TEXT NOT NULL CHECK (closed_reason IN ('TIME_UP','MANUAL','ACTIVITY_ENDED')),
+          closed_at     INTEGER NOT NULL,
+          voided        INTEGER NOT NULL DEFAULT 0 CHECK (voided IN (0,1)),
+          PRIMARY KEY (activity_id, question_id, round)
+        );
+        INSERT INTO question_results_v4 (activity_id, question_id, round, answer, winner_team, submitted_at, closed_reason, closed_at, voided)
+          SELECT activity_id, question_id, 1, answer, winner_team, submitted_at, closed_reason, closed_at, 0 FROM question_results;
+        DROP TABLE question_results;
+        ALTER TABLE question_results_v4 RENAME TO question_results;
+        CREATE UNIQUE INDEX idx_question_results_valid
+          ON question_results(activity_id, question_id) WHERE voided = 0;
+
+        CREATE TABLE result_parts (
+          activity_id TEXT NOT NULL,
+          question_id TEXT NOT NULL,
+          round       INTEGER NOT NULL CHECK (round >= 1),
+          part_index  INTEGER NOT NULL CHECK (part_index BETWEEN 0 AND 9),
+          answer      TEXT NOT NULL,
+          PRIMARY KEY (activity_id, question_id, round, part_index)
+        );
+        INSERT INTO result_parts (activity_id, question_id, round, part_index, answer)
+          SELECT activity_id, question_id, 1, 0, answer FROM question_results WHERE answer IS NOT NULL;
+
+        UPDATE questions SET status = 'CLOSED', current_round = 1,
+          closed_reason = (SELECT r.closed_reason FROM question_results r WHERE r.question_id = questions.question_id),
+          closed_at = (SELECT r.closed_at FROM question_results r WHERE r.question_id = questions.question_id)
+          WHERE question_id IN (SELECT question_id FROM question_results);
+
+        CREATE TABLE activity_events (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          activity_id TEXT NOT NULL,
+          at          TEXT NOT NULL,
+          actor_id    INTEGER,
+          type        TEXT NOT NULL CHECK (type IN ('STARTED','QUESTION_OPENED','QUESTION_REOPENED',
+                        'QUESTION_CLOSED','BACK_TO_WAITING','ENDED','RESTART_CANCELLED')),
+          question_id TEXT,
+          detail      TEXT
+        );
+        CREATE INDEX idx_activity_events_activity ON activity_events(activity_id, id);
+      `);
+      // 002 的 mock 活動（A1）在正式流程中不再使用：未結束者標為結束（research.md R2）
+      db.prepare(
+        `UPDATE activities SET phase = 'ENDED', current_question_id = NULL, ends_at = NULL,
+           ended_at = ?, updated_at = ? WHERE id = 'A1' AND phase != 'ENDED'`,
+      ).run(nowMs, nowMs);
+    },
+  },
 ];
 
-export function migrate(db: Database, now: Date = new Date()): number[] {
+/** 套用尚未執行的 migration；`upTo` 供測試模擬舊版本資料庫（預設全部）。 */
+export function migrate(db: Database, now: Date = new Date(), upTo = Infinity): number[] {
   db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL
@@ -206,7 +339,7 @@ export function migrate(db: Database, now: Date = new Date()): number[] {
   );
   const ran: number[] = [];
   for (const m of MIGRATIONS) {
-    if (applied.has(m.version)) continue;
+    if (applied.has(m.version) || m.version > upTo) continue;
     transaction(db, () => {
       m.up(db, now.toISOString());
       db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(

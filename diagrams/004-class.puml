@@ -1,0 +1,226 @@
+@startuml 004-class
+title F5/F8 類別圖：活動、活動題目、送出與監控視圖
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+
+enum ActivityPhase {
+  WAITING
+  ANSWERING
+  CLOSED
+  ENDED
+}
+
+enum ActivityQuestionStatus {
+  NOT_OPENED
+  ANSWERING
+  CLOSED
+}
+
+enum ClosedReason {
+  TIME_UP
+  MANUAL
+  ACTIVITY_ENDED
+}
+
+enum QuestionKind {
+  SINGLE
+  GROUP
+}
+
+enum ActivityEventType {
+  STARTED
+  QUESTION_OPENED
+  QUESTION_CLOSED
+  QUESTION_REOPENED
+  BACK_TO_WAITING
+  ENDED
+  RESTART_CANCELLED
+}
+
+class Activity {
+  +id: string
+  +phase: ActivityPhase
+  +currentQuestionId: string | null
+  +openedAt: number | null
+  +endsAt: number | null
+  +startedAt: number | null
+  +startedBy: number | null
+  +endedAt: number | null
+  +sourceTitle: string
+  +notice: string | null
+}
+
+class ActivityQuestion {
+  +questionId: string
+  +activityId: string
+  +questionKey: string
+  +position: number
+  +kind: QuestionKind
+  +stem: string | null
+  +status: ActivityQuestionStatus
+  +currentRound: number
+  +seconds: number | null
+  +openedAt: number | null
+  +closedAt: number | null
+  +closedReason: ClosedReason | null
+}
+
+class QuestionPart {
+  +partIndex: number
+  +partLabel: string | null
+  +questionText: string
+}
+
+class ParticipatingTeam {
+  +activityId: string
+  +questionId: string
+  +teamId: string
+  +teamName: string
+  +memberCount: number
+}
+
+class Submission {
+  +activityId: string
+  +questionId: string
+  +teamId: string
+  +studentId: string
+  +answers: PartAnswer[]
+  +round: number
+  +voided: boolean
+  +receivedAt: number
+  +rank: number
+}
+
+class PartAnswer {
+  +partIndex: number
+  +answer: string
+}
+
+class QuestionResult {
+  +activityId: string
+  +questionId: string
+  +winnerTeam: string | null
+  +submittedAt: number | null
+  +round: number
+  +voided: boolean
+  +closedReason: ClosedReason
+  +answers: PartAnswer[]
+}
+
+class ActivityEvent {
+  +at: Date
+  +actorId: number | null
+  +type: ActivityEventType
+  +questionId: string | null
+  +detail: string | null
+}
+
+class ActivityStateMachine {
+  -state: Activity | null
+  -timer
+  +status(): TeacherStatus
+  +start(activity): void
+  +open(questionId, seconds): void
+  +reopen(questionId, seconds): void
+  +timeUp(): void
+  +manualClose(): void
+  +closeQuestion(reason, notify): boolean
+  +backToWaiting(): void
+  +end(): void
+  +reset(): void
+  +recoverAfterRestart(): string | null
+  +clearNotice(): void
+  +dispose(): void
+}
+
+class ActivityService {
+  +getView(): TeacherActivityView
+  +startActivity(teacherId): TeacherActivityView
+  +openQuestion(teacherId, questionId, seconds): TeacherActivityView
+  +closeQuestion(teacherId): TeacherActivityView
+  +reopenQuestion(teacherId, questionId, seconds, confirm): TeacherActivityView
+  +backToWaiting(teacherId): TeacherActivityView
+  +endActivity(teacherId): TeacherActivityView
+  +getQuestionResult(questionId): ResultBoardView
+}
+
+class ActivityLockGuard {
+  +bind(phaseReader): void
+  +assertQuestionSetMutable(): void
+  +assertGroupChangeAllowed(): void
+}
+
+class SubmissionService {
+  +startQuestion(questionId, round, parts): void
+  +clear(): void
+  +submit(student, questionId, answers): Submission
+  +forTeam(teamId): Submission | undefined
+  +all(): Submission[]
+}
+
+class ResultService {
+  +finalize(activityId, questionId, round, submissions, reason): QuestionResult
+}
+
+class MonitorViewBuilder {
+  +build(now): TeacherActivityView
+  +buildResult(questionId): ResultBoardView
+}
+
+class ActivityRules <<shared>> {
+  +validateSeconds(input): number
+  +validatePartAnswers(parts, partCount): PartAnswer[]
+}
+
+class TeacherActivityView <<DTO>> {
+  +phase: ActivityPhase | NONE
+  +endsAt: string | null
+  +serverNow: string
+  +questions: QuestionListItem[]
+  +preselectedQuestionId: string | null
+  +progress: closed / total
+  +monitor: MonitorView | null
+  +notice: string | null
+}
+
+class MonitorView <<DTO>> {
+  +questionId: string
+  +submittedCount: number
+  +teamCount: number
+  +teams: MonitorTeamRow[]
+}
+
+class MonitorTeamRow <<DTO>> {
+  +teamId: string
+  +teamName: string
+  +submitted: boolean
+  +rank: number | null
+  +elapsedSeconds: number | null
+  +submitterName: string | null
+  +answers: PartAnswer[] | null
+  +online: number
+  +members: number
+}
+
+Activity "1" *-- "1..200" ActivityQuestion
+ActivityQuestion "1" *-- "1..10" QuestionPart
+ActivityQuestion "1" *-- "0..*" ParticipatingTeam
+ActivityQuestion "1" -- "0..*" Submission
+Submission "1" *-- "1..10" PartAnswer
+ActivityQuestion "1" -- "0..1" QuestionResult
+Activity "1" -- "0..*" ActivityEvent
+
+ActivityService --> ActivityStateMachine
+ActivityService --> ActivityRules
+ActivityService --> MonitorViewBuilder
+ActivityLockGuard --> ActivityStateMachine
+ActivityStateMachine --> SubmissionService : onQuestionOpened
+ActivityStateMachine --> ResultService : onQuestionClosed
+SubmissionService --> ActivityRules
+MonitorViewBuilder ..> TeacherActivityView
+TeacherActivityView *-- MonitorView
+MonitorView *-- MonitorTeamRow
+ActivityStateMachine --> Activity
+@enduml

@@ -65,4 +65,30 @@ describe('ResultView（FR-017、FR-018、Q-T17、Q-T20）', () => {
     expect(screen.getByText('第 1 題')).toBeInTheDocument();
     expect(screen.getByText('題目一')).toBeInTheDocument();
   });
+
+  it('題組依小題分列各組答案，仍不顯示送出時間與送出者（004 FR-030b）', () => {
+    render(
+      <ResultView
+        view={base({
+          question: { questionId: 'Q2', number: 2, label: 'Q2', text: '題幹', kind: 'GROUP', stem: '題幹', parts: [] },
+          results: [
+            {
+              rank: 1,
+              teamName: '第 2 組',
+              answer: '（1）甲（2）乙',
+              answers: [
+                { partIndex: 0, partLabel: '（1）', answer: '甲' },
+                { partIndex: 1, partLabel: '（2）', answer: '乙' },
+              ],
+              isWinner: true,
+            },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getByText('第 Q2 題')).toBeInTheDocument();
+    expect(screen.getByText('（1） 甲')).toBeInTheDocument();
+    expect(screen.getByText('（2） 乙')).toBeInTheDocument();
+    expect(screen.queryByText(/送出者|秒/)).not.toBeInTheDocument();
+  });
 });

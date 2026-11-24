@@ -32,6 +32,8 @@ import type { SheetsService } from './sheetsService.js';
 
 export const DRAFT_TTL_MS = 30 * 60_000;
 
+import type { ActivityLockGuard } from './activityLockGuard.js';
+
 export interface QuestionImportServiceDeps {
   sheets: SheetsService;
   codec: AnnotationCodec;
@@ -41,6 +43,8 @@ export interface QuestionImportServiceDeps {
   clock: Clock;
   logger: Logger;
   runInTransaction: <T>(fn: () => T) => T;
+  /** 004：活動進行中禁止確認匯入（FR-005） */
+  lock?: ActivityLockGuard;
 }
 
 export interface DraftWithValidation {
@@ -286,6 +290,8 @@ export class QuestionImportService {
    * 已確認過的草稿再次呼叫時回傳既有結果（FR-030）。
    */
   async confirm(userId: number, draftId: string): Promise<QuestionSetView> {
+    // 004：活動進行中不可取代題目集（FR-005）；讀取學習單與標註不鎖
+    this.deps.lock?.assertQuestionSetMutable();
     const draft = this.openDraft(userId, draftId);
     if (draft.status === 'CONFIRMED') {
       const current = this.deps.sets.findCurrent();

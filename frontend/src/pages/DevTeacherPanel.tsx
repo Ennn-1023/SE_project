@@ -118,14 +118,28 @@ export function DevTeacherPanel() {
         <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void run('close')}>
           手動結束
         </button>
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void run('next')}>
-          下一題
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy}
+          onClick={() => void run('back-to-waiting')}
+        >
+          回到等待畫面
         </button>
         <button type="button" className="btn btn-outline" disabled={busy} onClick={() => void run('end')}>
           結束活動
         </button>
         <button type="button" className="btn btn-outline" disabled={busy} onClick={() => void run('reset')}>
           重設
+        </button>
+        {/* 004：啟動時不再自動建立 mock 活動，改由此按鈕建立（FR-032） */}
+        <button
+          type="button"
+          className="btn btn-outline"
+          disabled={busy}
+          onClick={() => void run('mock-activity').then(load)}
+        >
+          以 mock 題目開始活動
         </button>
       </div>
 

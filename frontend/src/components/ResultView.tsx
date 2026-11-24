@@ -14,7 +14,9 @@ export function ResultView({ view }: { view: StudentView }) {
   return (
     <section className="card result" aria-labelledby="result-title">
       <div className="answering-head">
-        {view.question && <span className="badge">第 {view.question.number} 題</span>}
+        {view.question && (
+          <span className="badge">第 {view.question.label ?? view.question.number} 題</span>
+        )}
         <span className="muted">搶答已結束</span>
       </div>
       {view.question && (
@@ -48,7 +50,16 @@ export function ResultView({ view }: { view: StudentView }) {
                   <strong>{r.teamName}</strong>
                   {r.isWinner && <span className="winner-tag">搶答成功</span>}
                 </div>
-                <p className="result-answer">{r.answer}</p>
+                {view.question?.kind === 'GROUP' && r.answers ? (
+                  // 題組依小題分列（004 FR-030b）；仍不顯示送出時間與送出者
+                  r.answers.map((a) => (
+                    <p key={a.partIndex} className="result-answer">
+                      {a.partLabel} {a.answer}
+                    </p>
+                  ))
+                ) : (
+                  <p className="result-answer">{r.answer}</p>
+                )}
               </div>
             </li>
           ))}

@@ -1,0 +1,108 @@
+@startuml 004-sequence-question
+title F5/F8 時序圖：開放題目 → 即時監控 → 時間到／手動結束 → 直接開放下一題／重新開放
+skinparam backgroundColor #FAF7F0
+skinparam sequence {
+  ParticipantBackgroundColor #F5F0E6
+  ParticipantBorderColor #1F3A93
+  ArrowColor #1F3A93
+  LifeLineBorderColor #1F3A93
+}
+autonumber
+
+actor "老師" as T
+participant "ActivityControlPage\n+ useTeacherActivity" as TC
+participant "ActivityRoutes" as AR
+participant "ActivityService" as AS
+participant "ActivityStateMachine" as FSM
+participant "SubmissionService" as SS
+participant "ResultService" as RS
+participant "MonitorViewBuilder" as MB
+participant "SocketServer" as SK
+participant "StudentPage" as SC
+actor "B 組代表" as S
+database "Repository" as DB
+
+== 開放題目 ==
+T -> TC : 點選第 1 題、秒數 60、按「開始搶答」
+TC -> AR : POST /teacher/activity/open {questionId, seconds}
+AR -> AR : RequireAuth + RequireRole(TEACHER)
+AR -> AS : openQuestion(teacher, Q1, 60)
+AS -> FSM : open(Q1, 60)
+FSM -> FSM : ActivityRules.validateSeconds（5–600 整數）
+FSM -> FSM : 確認 phase=WAITING 或 CLOSED、Q1 為 NOT_OPENED
+FSM -> AS : onQuestionOpened hook
+AS -> SS : startQuestion(Q1, round=1, parts)
+AS -> DB : 記錄本輪參與組別（開放當下有成員的組）
+FSM -> DB : 儲存 ANSWERING、openedAt、endsAt
+FSM -> FSM : setTimeout(60s)
+FSM -> SK : onChange
+SK -> MB : build()（老師視角）
+SK --> TC : teacher:update {phase=ANSWERING, endsAt, monitor 0/4}
+SK --> SC : state:update（學生視角，不含他組資料）
+AS -> DB : ActivityEvent(QUESTION_OPENED, 60)
+AR --> TC : 200 TeacherActivityView
+
+== 即時監控 ==
+S -> SC : 填寫（1）（2）小題並送出
+SC -> SS : POST /student/submissions {Q1, answers[]}（StudentRoutes）
+SS -> SS : validatePartAnswers（每小題 1–500 字）
+SS -> SS : 同步寫入記憶體 Map(B 組, rank=1, receivedAt, answers[])
+SS --> SK : StudentRoutes：pushToTeam(B 組) → pushTeachers()
+SK --> SC : 僅 B 組連線：本組已送出
+SK -> MB : build()
+SK --> TC : teacher:update {B 組 第 1 名、+3.2 秒、送出者、答案}
+TC --> T : 看板顯示「目前最快：B 組」、1/4\n常駐提醒「請勿投影給學生」
+
+== 結束（時間到 或 手動結束，只結束一次） ==
+alt 倒數歸零
+  FSM -> FSM : closeQuestion(TIME_UP)
+else 老師提前結束
+  T -> TC : 按「結束搶答」→ 確認視窗「確定結束」
+  TC -> AR : POST /teacher/activity/close
+  AR -> AS : closeQuestion(teacher)
+  AS -> FSM : manualClose() → closeQuestion(MANUAL)
+end
+FSM -> FSM : 已非 ANSWERING 則直接回傳 false（冪等）
+FSM -> AS : onQuestionClosed hook
+AS -> RS : finalize(Q1, round, submissions, reason)
+RS -> DB : 單一交易：作廢本題較早輪次 + 寫入 Submission / QuestionResult(winner=B, answers[], closedReason)
+AS -> DB : ActivityEvent(QUESTION_CLOSED；時間到時 actor = null)
+FSM -> DB : phase=CLOSED、Q1 status=CLOSED
+FSM -> SK : onChange
+SK --> TC : teacher:update {CLOSED, ResultBoard 依順位、未送出組}
+SK --> SC : state:update（所有組答案依小題分列）
+
+== 直接開放下一題（不經等待畫面） ==
+TC --> T : 結果畫面已預選 Q2（下一個未開放題目）
+note over SC : 學生持續看到 Q1 結果
+T -> TC : 秒數 60、按「開始搶答」
+TC -> AR : POST /teacher/activity/open {Q2, 60}
+AR -> AS : openQuestion(teacher, Q2, 60)
+AS -> FSM : open(Q2, 60)：CLOSED → ANSWERING
+FSM -> SK : onChange
+SK --> TC : teacher:update {ANSWERING Q2, monitor 0/4}
+SK --> SC : state:update（Q1 結果 → Q2 作答）
+
+== 重新開放已結束題目（選用） ==
+T -> TC : 選 Q1、按「重新開放」→ 確認「會取代目前結果（B 組搶答成功）」
+TC -> AR : POST /teacher/activity/reopen {Q1, seconds, confirm=true}
+AR -> AS : reopenQuestion(teacher, Q1, 60, true)
+AS -> AS : confirm 不為 true → 409 REOPEN_NOT_CONFIRMED
+AS -> FSM : reopen(Q1, 60)
+FSM -> AS : onQuestionOpened hook
+AS -> SS : startQuestion(Q1, round=2, parts)
+note right of DB : round 1 結果此時仍有效；新一輪結束時才在同一交易中作廢，\n因此伺服器在作答中重啟可恢復原結果
+FSM -> DB : ANSWERING、Q1 currentRound=2
+AS -> DB : ActivityEvent(QUESTION_REOPENED, 作廢結果摘要)
+FSM -> SK : onChange
+SK --> TC : teacher:update {ANSWERING Q1 第 2 輪, 0/4}
+SK --> SC : state:update（各組可重新送出）
+
+== 回到等待畫面（選用） ==
+T -> TC : 按「回到等待畫面」
+TC -> AR : POST /teacher/activity/back-to-waiting
+AR -> AS : backToWaiting(teacher)
+AS -> FSM : backToWaiting() → phase=WAITING
+FSM -> SK : onChange
+SK --> SC : state:update {WAITING}
+@enduml

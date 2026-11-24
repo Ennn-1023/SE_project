@@ -4,6 +4,7 @@ import type { StudentView } from '@buzzer/shared';
 import { Config } from '../../src/config/env';
 import { openDb, type Db } from '../../src/data/db';
 import { startServer, type RunningServer } from '../../src/server';
+import { createMockActivity } from '../../src/data/mock/seed';
 import { fastHasher } from './testApp';
 
 /** 測試用虛構設定值（不是任何真實密碼）。 */
@@ -92,7 +93,7 @@ async function seedAccounts(server: RunningServer): Promise<void> {
 /** 在隨機 port 啟動完整伺服器（預設 :memory: DB），供整合測試使用 */
 export async function startTestServer(
   env: Record<string, string> = {},
-  opts: { db?: Db } = {},
+  opts: { db?: Db; /** 以 mock 題目開始活動（預設 true；004 起不再於啟動時自動 seed） */ mockActivity?: boolean } = {},
 ): Promise<TestServer> {
   const config = Config.load({ ...TEST_ENV, ...env });
   // :memory: 由測試持有；實體檔案（重啟測試）則交給伺服器開關，模擬真正的重啟
@@ -116,6 +117,10 @@ export async function startTestServer(
       .post(`/api/dev/teacher${path}`)
       .set('Cookie', teacherCookie)
       .send(body ?? {});
+  // 004 起啟動時不再自動 seed：資料庫中沒有任何活動時以 mock 題目開始一場（重啟測試第二次啟動時保留原活動）
+  if (opts.mockActivity !== false && !server.ctx.repo.getCurrentActivity()) {
+    server.ctx.machine.start(createMockActivity(server.ctx.repo));
+  }
 
   return {
     server,
@@ -177,7 +182,7 @@ export async function startTestServer(
         post('/open', seconds === undefined ? { questionId } : { questionId, seconds }),
       timeUp: () => post('/time-up'),
       close: () => post('/close'),
-      next: () => post('/next'),
+      next: () => post('/back-to-waiting'),
       end: () => post('/end'),
       reset: () => post('/reset'),
     },

@@ -7,6 +7,7 @@ import type { QuestionEventRepository, QuestionSetRepository } from '../domain/q
 import type { QuestionSetRecord } from '../domain/questionTypes.js';
 import type { Clock } from '../lib/clock.js';
 import { appError } from '../lib/errors.js';
+import type { ActivityLockGuard } from './activityLockGuard.js';
 import type { DraftWithValidation, QuestionImportService } from './questionImportService.js';
 
 /** 題目集（或預覽）對外格式（data-model.md §2.4）：格子位置加上分頁名稱。 */
@@ -44,6 +45,8 @@ export interface QuestionSetServiceDeps {
   events: QuestionEventRepository;
   imports: QuestionImportService;
   clock: Clock;
+  /** 004：活動進行中禁止清除與重新匯入（FR-005） */
+  lock?: ActivityLockGuard;
 }
 
 export class QuestionSetService {
@@ -57,6 +60,7 @@ export class QuestionSetService {
 
   /** 清除題目集（US5）；試算表上的標註保留，下次匯入可帶回。 */
   clear(userId: number): void {
+    this.deps.lock?.assertQuestionSetMutable();
     const record = this.deps.sets.findCurrent();
     if (!record) return;
     this.deps.sets.clear();
@@ -72,6 +76,7 @@ export class QuestionSetService {
 
   /** 重新讀取目前題目集的來源並建立草稿，帶回試算表上的標註（US4）。 */
   async reimport(userId: number): Promise<DraftWithValidation> {
+    this.deps.lock?.assertQuestionSetMutable();
     const record = this.deps.sets.findCurrent();
     if (!record) {
       throw appError('NOT_FOUND', {

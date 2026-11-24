@@ -99,4 +99,84 @@ describe('AnsweringView（FR-001、FR-014、FR-014a）', () => {
     expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
     expect(container.querySelector('img')).toBeNull();
   });
+
+  it('題組：每小題一個作答框，任一小題空白不能送出，整題一次送出 answers（004 FR-030a）', async () => {
+    const fetchMock = vi.fn(async () =>
+      json(
+        {
+          questionId: 'Q2',
+          teamId: 'T1',
+          answer: '（1）甲\n（2）乙',
+          answers: [
+            { partIndex: 0, partLabel: '（1）', answer: '甲' },
+            { partIndex: 1, partLabel: '（2）', answer: '乙' },
+          ],
+        },
+        201,
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(
+      <AnsweringView
+        view={view({
+          question: {
+            questionId: 'Q2',
+            number: 2,
+            label: '2',
+            text: '閱讀下列敘述後回答。',
+            kind: 'GROUP',
+            stem: '閱讀下列敘述後回答。',
+            parts: [
+              { partIndex: 0, partLabel: '（1）', text: '小題一的題目' },
+              { partIndex: 1, partLabel: '（2）', text: '小題二的題目' },
+            ],
+          },
+        })}
+        clockOffset={0}
+        offline={false}
+      />,
+    );
+    expect(screen.getByText('第 2 題（題組）')).toBeInTheDocument();
+    const button = screen.getByRole('button', { name: '送出答案' });
+    await user.type(screen.getByLabelText('（1）的答案'), '甲');
+    expect(button).toBeDisabled();
+    await user.type(screen.getByLabelText('（2）的答案'), '乙');
+    expect(button).toBeEnabled();
+    await user.click(button);
+    expect(JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({
+      questionId: 'Q2',
+      answers: ['甲', '乙'],
+    });
+    expect(await screen.findByText('本組已送出')).toBeInTheDocument();
+    expect(screen.getByText('（2） 乙')).toBeInTheDocument();
+  });
+
+  it('題組某小題超過 500 字時指出小題並禁止送出', async () => {
+    render(
+      <AnsweringView
+        view={view({
+          question: {
+            questionId: 'Q2',
+            number: 2,
+            text: '題幹',
+            kind: 'GROUP',
+            stem: '題幹',
+            parts: [
+              { partIndex: 0, partLabel: '（1）', text: '小題一' },
+              { partIndex: 1, partLabel: '（2）', text: '小題二' },
+            ],
+          },
+        })}
+        clockOffset={0}
+        offline={false}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('（1）的答案'), '甲');
+    await user.click(screen.getByLabelText('（2）的答案'));
+    await user.paste('a'.repeat(501));
+    expect(screen.getByText('（2）答案最多 500 字，目前 501 字，請精簡後再送出')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '送出答案' })).toBeDisabled();
+  });
 });

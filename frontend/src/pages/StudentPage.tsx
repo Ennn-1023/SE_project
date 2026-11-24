@@ -37,6 +37,7 @@ export function StudentPage({ socketFactory }: Props) {
           回學生首頁
         </Link>
         {!view && <p className="muted">載入中…</p>}
+        {view?.phase === 'NO_ACTIVITY' && <WaitingView noActivity />}
         {view?.phase === 'WAITING' && <WaitingView />}
         {view?.phase === 'ANSWERING' && (
           // 以題目 ID 作為 key：換題時清除上一題的草稿與已送出狀態

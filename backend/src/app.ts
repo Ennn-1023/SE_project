@@ -43,6 +43,9 @@ import { questionSetRoutes } from './routes/questionSetRoutes.js';
 import { GoogleAuthService } from './services/googleAuthService.js';
 import { QuestionImportService } from './services/questionImportService.js';
 import { QuestionSetService } from './services/questionSetService.js';
+import { ActivityLockGuard } from './services/activityLockGuard.js';
+import { ActivityEventRepository } from './db/activityEventRepository.js';
+import { activityRoutes } from './routes/activityRoutes.js';
 import { SheetsService } from './services/sheetsService.js';
 
 export interface AppDeps {
@@ -70,7 +73,10 @@ export function createContainer(deps: AppDeps) {
     importDrafts: new ImportDraftRepository(deps.db),
     questionSets: new QuestionSetRepository(deps.db),
     questionEvents: new QuestionEventRepository(deps.db),
+    activityEvents: new ActivityEventRepository(deps.db),
   };
+  // 004：活動進行中鎖定題目集、作答中鎖定組別；startServer 建立狀態機後才綁定（research.md R8）
+  const activityLock = new ActivityLockGuard();
   const sessionService = new SessionService(repos.sessions, deps.config, clock);
   const runInTransaction = <T>(fn: () => T): T => transaction(deps.db, fn);
 
@@ -109,19 +115,25 @@ export function createContainer(deps: AppDeps) {
     clock,
     logger,
     runInTransaction,
+    lock: activityLock,
   });
   const questionSets = new QuestionSetService({
     sets: repos.questionSets,
     events: repos.questionEvents,
     imports: questionImport,
     clock,
+    lock: activityLock,
   });
   const services = {
     sessions: sessionService,
     auth: new AuthService(repos.users, sessionService, hasher, deps.config, clock),
     accounts: new AccountService(repos.users, sessionService, hasher, deps.config, clock),
-    groups: new GroupService(repos.users, repos.groupSettings, clock, (fn) =>
-      transaction(deps.db, fn),
+    groups: new GroupService(
+      repos.users,
+      repos.groupSettings,
+      clock,
+      (fn) => transaction(deps.db, fn),
+      activityLock,
     ),
     googleAuth,
     sheets,
@@ -136,6 +148,7 @@ export function createContainer(deps: AppDeps) {
     logger,
     repos,
     services,
+    activityLock,
     runInTransaction,
   };
 }
@@ -200,6 +213,15 @@ export function createApp(deps: CreateAppOptions) {
     const auth = requireAuth(services.sessions, repos.users);
     // 學生搶答 API：以 001 的 session 登入，只限學生
     api.use('/student', auth, requireRole('STUDENT'), studentRouter(deps.buzzer));
+    // 老師活動控制與監控（004 contracts/openapi.yaml）
+    api.use(
+      '/teacher/activity',
+      activityRoutes({
+        activities: deps.buzzer.activities,
+        sessions: services.sessions,
+        users: repos.users,
+      }),
+    );
     if (config.enableDevTools) {
       // 模擬老師搶答操作（002 FR-022～FR-024），整合後須以老師身分登入
       api.use('/dev/teacher', auth, requireRole('TEACHER'), devTeacherRouter(deps.buzzer));

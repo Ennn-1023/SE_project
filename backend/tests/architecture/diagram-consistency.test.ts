@@ -1,6 +1,6 @@
 /**
  * 設計圖與程式碼一致性驗證（憲章原則 VI、001 research R15／tasks T077、003 tasks T088）。
- * 解析 diagrams/001-*、003-* 的組件圖與類別圖，依各功能 plan.md「設計圖對照表」與
+ * 解析 diagrams/001-*、003-*、004-* 的組件圖與類別圖，依各功能 plan.md「設計圖對照表」與
  * 「基礎設施檔案允許清單」確認：
  *  1. 每個組件／類別在對照的檔案中存在並匯出同名符號；
  *  2. 服務、repository 介面、外部整合、PasswordHasher、Clock 的公開方法與類別圖完全一致；
@@ -144,6 +144,11 @@ const set003 = loadDiagramSet(
   'specs/003-sheets-question-import/plan.md',
   'diagrams/003-component.puml',
   'diagrams/003-class.puml',
+);
+const set004 = loadDiagramSet(
+  'specs/004-activity-control-monitor/plan.md',
+  'diagrams/004-component.puml',
+  'diagrams/004-class.puml',
 );
 
 // ---------- TypeScript 原始碼解析 ----------
@@ -307,12 +312,31 @@ describeDiagramSet('003', set003, 30, [
   'ImportDraftRepository',
 ]);
 
-describe('程式檔案 ↔ 設計圖對照表（001＋003）', () => {
+describeDiagramSet('004', set004, 34, [
+  'Activity',
+  'ActivityQuestion',
+  'Submission',
+  'QuestionResult',
+  'ActivityStateMachine',
+  'ActivityService',
+  'MonitorViewBuilder',
+  'ActivityLockGuard',
+  'SubmissionService',
+  'ResultService',
+  'TeacherActivityView',
+  'MonitorView',
+]);
+
+describe('程式檔案 ↔ 設計圖對照表（001＋003＋004）', () => {
   it('routes／services／db／middleware／integrations 下沒有圖表與允許清單以外的檔案', () => {
     const mapped = new Set(
-      [...set001.componentMap.values(), ...set003.componentMap.values()].flat(),
+      [
+        ...set001.componentMap.values(),
+        ...set003.componentMap.values(),
+        ...set004.componentMap.values(),
+      ].flat(),
     );
-    const allowed = [...set001.allowPatterns, ...set003.allowPatterns];
+    const allowed = [...set001.allowPatterns, ...set003.allowPatterns, ...set004.allowPatterns];
     const extra: string[] = [];
     for (const dir of ['routes', 'services', 'db', 'middleware', 'integrations/google']) {
       const abs = path.join(ROOT, 'backend/src', dir);

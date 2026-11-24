@@ -1,5 +1,7 @@
 /** ApiClient（組件圖）：集中處理 fetch、JSON 與一致錯誤格式（contracts/openapi.yaml）。 */
 import type {
+  ResultBoardView,
+  TeacherActivityView,
   AnnotationDocument,
   GridSnapshot,
   QuestionSetView,
@@ -210,4 +212,22 @@ export const api = {
   getQuestionSet: () => client.get<{ questionSet: QuestionSetView | null }>('/question-set'),
   clearQuestionSet: () => client.del<void>('/question-set'),
   reimportQuestionSet: () => client.post<{ draft: ImportDraftView }>('/question-set/reimport'),
+  // 004：老師活動控制與監控（specs/004-activity-control-monitor/contracts/openapi.yaml）
+  getActivity: () => client.get<TeacherActivityView>('/teacher/activity'),
+  startActivity: () => client.post<TeacherActivityView>('/teacher/activity/start'),
+  openQuestion: (questionId: string, seconds: number) =>
+    client.post<TeacherActivityView>('/teacher/activity/open', { questionId, seconds }),
+  reopenQuestion: (questionId: string, seconds: number) =>
+    client.post<TeacherActivityView>('/teacher/activity/reopen', {
+      questionId,
+      seconds,
+      confirm: true,
+    }),
+  closeQuestion: () => client.post<TeacherActivityView>('/teacher/activity/close'),
+  backToWaiting: () => client.post<TeacherActivityView>('/teacher/activity/back-to-waiting'),
+  endActivity: () => client.post<TeacherActivityView>('/teacher/activity/end'),
+  getQuestionResult: (questionId: string) =>
+    client.get<ResultBoardView>(
+      `/teacher/activity/questions/${encodeURIComponent(questionId)}/result`,
+    ),
 };

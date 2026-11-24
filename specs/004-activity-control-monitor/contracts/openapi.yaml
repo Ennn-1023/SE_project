@@ -1,0 +1,371 @@
+openapi: 3.1.0
+info:
+  title: 課程搶答系統 API — F5/F8（活動管理與逐題開放控制、老師即時監控看板）
+  version: 0.1.0
+  description: |
+    所有路徑皆位於 `/api` 之下，沿用 001 的 `sid` cookie、`application/json` 與 `ErrorResponse` 格式。
+    `/teacher/activity/*` 只限老師：未登入 401 `UNAUTHENTICATED`、學生 403 `FORBIDDEN`「權限不足」（FR-027）。
+    所有回應中的 `TeacherActivityView` 與 Socket.IO `/teacher` 的 `teacher:update` payload 相同
+    （型別見 ../data-model.md §3）。冪等規則見 ../research.md R11。
+servers:
+  - url: /api
+
+security:
+  - sessionCookie: []
+
+tags:
+  - name: teacher-activity
+  - name: student
+  - name: locks
+  - name: dev
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: sid
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, field, message, hint]
+          properties:
+            code:
+              type: string
+              description: |
+                本功能新增或使用的錯誤碼（HTTP 狀態）：
+                - 400 `VALIDATION_ERROR` 欄位型別或長度錯誤
+                - 400 `INVALID_SECONDS`「作答秒數須為 5～600 的整數」
+                - 400 `PART_COUNT_MISMATCH`「答案數量與小題數不符，請重新整理頁面」
+                - 400 `PART_ANSWER_EMPTY`「第（2）小題答案不可為空」（field = answers[1]）
+                - 400 `PART_ANSWER_TOO_LONG`「第（2）小題答案最多 500 字，目前 N 字」
+                - 404 `QUESTION_NOT_FOUND`「找不到這一題，請重新整理題目清單」
+                - 409 `NO_ACTIVITY`「目前沒有進行中的活動」
+                - 409 `ACTIVITY_ALREADY_RUNNING`「已有進行中的活動，請先結束目前活動」
+                - 409 `NO_QUESTION_SET`「尚未匯入題目，請先到題目管理匯入學習單」
+                - 409 `NO_TEAM_MEMBERS`「尚無任何組別有學生，請先到組別管理分組」
+                - 409 `INVALID_TRANSITION`「目前第 1 題作答中，請先結束搶答再開放其他題目」等
+                - 409 `QUESTION_ALREADY_CLOSED`「第 1 題已結束；如需重答請使用『重新開放』」
+                - 409 `QUESTION_NOT_CLOSED`「只有已結束的題目可以重新開放」
+                - 409 `REOPEN_NOT_CONFIRMED`「重新開放會取代本題目前的結果，請確認後再送出」
+                - 409 `QUESTION_SET_LOCKED`「搶答活動進行中，無法變更題目集；請先結束活動」
+                - 409 `GROUP_CHANGE_LOCKED`「搶答作答中，請於本題結束後再調整組別」
+                - 409 `QUESTION_CLOSED`／`QUESTION_NOT_OPEN`／`ALREADY_SUBMITTED`／`ACTIVITY_ENDED`（沿用 002）
+            field: { type: [string, 'null'] }
+            message: { type: string }
+            hint: { type: string }
+
+    TeacherActivityView:
+      type: object
+      description: 見 data-model.md §3；`monitor` 只在 ANSWERING、`result` 只在 CLOSED 有值。
+      required: [phase, serverNow, questions, progress, preselectedQuestionId, notice]
+      properties:
+        phase: { type: string, enum: [NONE, WAITING, ANSWERING, CLOSED, ENDED] }
+        serverNow: { type: string, format: date-time }
+        activity: { type: [object, 'null'] }
+        readiness: { type: [object, 'null'] }
+        questions: { type: array, items: { $ref: '#/components/schemas/QuestionListItem' } }
+        progress:
+          type: object
+          properties: { closed: { type: integer }, total: { type: integer } }
+        current: { type: [object, 'null'] }
+        endsAt: { type: [string, 'null'], format: date-time }
+        monitor: { oneOf: [{ $ref: '#/components/schemas/MonitorView' }, { type: 'null' }] }
+        result: { oneOf: [{ $ref: '#/components/schemas/ResultBoardView' }, { type: 'null' }] }
+        preselectedQuestionId: { type: [string, 'null'] }
+        notice: { type: [string, 'null'] }
+
+    QuestionListItem:
+      type: object
+      required: [questionId, label, position, kind, summary, status, round, winnerTeamName, stem, parts]
+      properties:
+        questionId: { type: string }
+        label: { type: string }
+        position: { type: integer, minimum: 1 }
+        kind: { type: string, enum: [SINGLE, GROUP] }
+        summary: { type: string }
+        status: { type: string, enum: [NOT_OPENED, ANSWERING, CLOSED] }
+        round: { type: integer, minimum: 0 }
+        winnerTeamName: { type: [string, 'null'] }
+        stem: { type: [string, 'null'] }
+        parts:
+          type: array
+          items:
+            type: object
+            properties:
+              partIndex: { type: integer }
+              partLabel: { type: [string, 'null'] }
+              text: { type: string }
+
+    PartAnswer:
+      type: object
+      required: [partIndex, partLabel, answer]
+      properties:
+        partIndex: { type: integer, minimum: 0 }
+        partLabel: { type: [string, 'null'] }
+        answer: { type: string }
+
+    MonitorTeamRow:
+      type: object
+      required: [teamId, teamName, submitted, rank, elapsedSeconds, submitterName, answers, online, members]
+      properties:
+        teamId: { type: string }
+        teamName: { type: string }
+        submitted: { type: boolean }
+        rank: { type: [integer, 'null'] }
+        elapsedSeconds: { type: [number, 'null'], description: 距本輪開放秒數，精確到 0.1 }
+        submitterName: { type: [string, 'null'] }
+        answers:
+          oneOf: [{ type: array, items: { $ref: '#/components/schemas/PartAnswer' } }, { type: 'null' }]
+        online: { type: integer, minimum: 0 }
+        members: { type: integer, minimum: 0 }
+
+    MonitorView:
+      type: object
+      required: [questionId, round, submittedCount, teamCount, allSubmitted, teams]
+      properties:
+        questionId: { type: string }
+        round: { type: integer }
+        submittedCount: { type: integer }
+        teamCount: { type: integer }
+        allSubmitted: { type: boolean }
+        teams: { type: array, items: { $ref: '#/components/schemas/MonitorTeamRow' } }
+
+    ResultBoardView:
+      type: object
+      required: [question, round, closedReason, rows, noSubmission]
+      properties:
+        question: { type: object }
+        round: { type: integer }
+        closedReason: { type: string, enum: [TIME_UP, MANUAL, ACTIVITY_ENDED] }
+        rows: { type: array, items: { $ref: '#/components/schemas/MonitorTeamRow' } }
+        noSubmission: { type: boolean }
+
+    OpenRequest:
+      type: object
+      required: [questionId]
+      additionalProperties: false
+      properties:
+        questionId: { type: string, minLength: 1, maxLength: 64 }
+        seconds: { type: integer, minimum: 5, maximum: 600, default: 60 }
+
+    ReopenRequest:
+      allOf:
+        - $ref: '#/components/schemas/OpenRequest'
+        - type: object
+          required: [confirm]
+          properties:
+            confirm: { type: boolean, const: true }
+
+  responses:
+    View:
+      description: 目前狀態
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/TeacherActivityView' }
+    Error400:
+      description: 輸入驗證失敗
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Error401:
+      description: 未登入
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Error403:
+      description: 權限不足（學生）
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Error404:
+      description: 找不到題目
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Error409:
+      description: 狀態不允許此操作
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+
+paths:
+  /teacher/activity:
+    get:
+      tags: [teacher-activity]
+      summary: 取得完整老師視圖（重新整理、重連、多裝置）（FR-024）
+      responses:
+        '200': { $ref: '#/components/responses/View' }
+        '401': { $ref: '#/components/responses/Error401' }
+        '403': { $ref: '#/components/responses/Error403' }
+
+  /teacher/activity/start:
+    post:
+      tags: [teacher-activity]
+      summary: 開始活動（FR-001～FR-003）
+      responses:
+        '200': { $ref: '#/components/responses/View' }
+        '401': { $ref: '#/components/responses/Error401' }
+        '403': { $ref: '#/components/responses/Error403' }
+        '409':
+          $ref: '#/components/responses/Error409'
+          description: ACTIVITY_ALREADY_RUNNING／NO_QUESTION_SET／NO_TEAM_MEMBERS
+
+  /teacher/activity/open:
+    post:
+      tags: [teacher-activity]
+      summary: 開放未開放的題目（WAITING 或 CLOSED）（FR-007～FR-009、FR-012、FR-013）
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/OpenRequest' } } }
+      responses:
+        '200': { $ref: '#/components/responses/View' }
+        '400': { $ref: '#/components/responses/Error400' }
+        '401': { $ref: '#/components/responses/Error401' }
+        '403': { $ref: '#/components/responses/Error403' }
+        '404': { $ref: '#/components/responses/Error404' }
+        '409': { $ref: '#/components/responses/Error409' }
+
+  /teacher/activity/reopen:
+    post:
+      tags: [teacher-activity]
+      summary: 重新開放已結束題目，新一輪結束後取代舊結果（FR-007a）
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ReopenRequest' } } }
+      responses:
+        '200': { $ref: '#/components/responses/View' }
+        '400': { $ref: '#/components/responses/Error400' }
+        '401': { $ref: '#/components/responses/Error401' }
+        '403': { $ref: '#/components/responses/Error403' }
+        '404': { $ref: '#/components/responses/Error404' }
+        '409': { $ref: '#/components/responses/Error409' }
+
+  /teacher/activity/close:
+    post:
+      tags: [teacher-activity]
+      summary: 手動結束目前題目（FR-010、FR-011）；題目已結束時 200 無變化
+      responses:
+        '200': { $ref: '#/components/responses/View' }
+        '401': { $ref: '#/components/responses/Error401' }
+        '403': { $ref: '#/components/responses/Error403' }
+        '409': { $ref: '#/components/responses/Error409' }
+
+  /teacher/activity/back-to-waiting:
+    post:
+      tags: [teacher-activity]
+      summary: 已結束 → 等待開放（選用，FR-012）
+      responses:
+        '200': { $ref: '#/components/responses/View' }
+        '401': { $ref: '#/components/responses/Error401' }
+        '403': { $ref: '#/components/responses/Error403' }
+        '409': { $ref: '#/components/responses/Error409' }
+
+  /teacher/activity/end:
+    post:
+      tags: [teacher-activity]
+      summary: 結束整場活動；作答中先結束目前題目並產生結果（FR-004）
+      responses:
+        '200': { $ref: '#/components/responses/View' }
+        '401': { $ref: '#/components/responses/Error401' }
+        '403': { $ref: '#/components/responses/Error403' }
+        '409': { $ref: '#/components/responses/Error409' }
+
+  /teacher/activity/questions/{questionId}/result:
+    get:
+      tags: [teacher-activity]
+      summary: 查看本場已結束題目的有效結果（唯讀，FR-019）
+      parameters:
+        - in: path
+          name: questionId
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        '200':
+          description: 有效輪次的結果看板
+          content: { application/json: { schema: { $ref: '#/components/schemas/ResultBoardView' } } }
+        '401': { $ref: '#/components/responses/Error401' }
+        '403': { $ref: '#/components/responses/Error403' }
+        '404': { $ref: '#/components/responses/Error404' }
+        '409':
+          $ref: '#/components/responses/Error409'
+          description: QUESTION_NOT_CLOSED（尚無有效結果）
+
+  /student/submissions:
+    post:
+      tags: [student]
+      summary: 學生送出（002 擴充：題組每小題一個答案，FR-030a）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [questionId, answers]
+                  properties:
+                    questionId: { type: string, minLength: 1, maxLength: 64 }
+                    answers: { type: array, minItems: 1, maxItems: 10, items: { type: string } }
+                - type: object
+                  description: 002 相容格式，只限單題
+                  required: [questionId, answer]
+                  properties:
+                    questionId: { type: string }
+                    answer: { type: string }
+      responses:
+        '201':
+          description: 已接受；不含順位（002 FR-015）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  questionId: { type: string }
+                  teamId: { type: string }
+                  answers: { type: array, items: { $ref: '#/components/schemas/PartAnswer' } }
+        '400': { $ref: '#/components/responses/Error400' }
+        '409': { $ref: '#/components/responses/Error409' }
+
+  /question-set:
+    delete:
+      tags: [locks]
+      summary: 003 清除題目集——活動未結束時 409 QUESTION_SET_LOCKED（FR-005）
+      responses:
+        '409': { $ref: '#/components/responses/Error409' }
+  /question-set/reimport:
+    post:
+      tags: [locks]
+      summary: 003 重新匯入——活動未結束時 409 QUESTION_SET_LOCKED
+      responses:
+        '409': { $ref: '#/components/responses/Error409' }
+  /question-import/drafts/{draftId}/confirm:
+    post:
+      tags: [locks]
+      summary: 003 確認匯入——活動未結束時 409 QUESTION_SET_LOCKED（讀取與標註不鎖）
+      parameters:
+        - { in: path, name: draftId, required: true, schema: { type: string } }
+      responses:
+        '409': { $ref: '#/components/responses/Error409' }
+  /groups/assignments/{studentId}:
+    put:
+      tags: [locks]
+      summary: 001 老師指派／移除組別——作答中 409 GROUP_CHANGE_LOCKED（FR-006）
+      parameters:
+        - { in: path, name: studentId, required: true, schema: { type: string } }
+      responses:
+        '409': { $ref: '#/components/responses/Error409' }
+  /groups/settings:
+    put:
+      tags: [locks]
+      summary: 001 設定組數——作答中 409 GROUP_CHANGE_LOCKED
+      responses:
+        '409': { $ref: '#/components/responses/Error409' }
+  /groups/me:
+    post:
+      tags: [locks]
+      summary: 001 學生自選組別——作答中 409 GROUP_CHANGE_LOCKED
+      responses:
+        '409': { $ref: '#/components/responses/Error409' }
+
+  /dev/teacher/mock-activity:
+    post:
+      tags: [dev]
+      summary: 只在 ENABLE_DEV_TOOLS=true 掛載；以 002 mock 題目開始一場活動（FR-032、research R2）
+      responses:
+        '200': { $ref: '#/components/responses/View' }
+        '409': { $ref: '#/components/responses/Error409' }

@@ -1,12 +1,14 @@
 import type { ButtonHTMLAttributes } from 'react';
 
 /** 撞色按鈕：primary 深藍、secondary 珊瑚橘；觸控區至少 44×44 px（FR-004）。 */
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
   primary: 'bg-primary text-white hover:bg-primary/90',
   secondary: 'bg-accent text-ink hover:bg-accent/90',
   ghost: 'border border-cream-300 bg-cream-100 text-ink hover:bg-cream-300',
+  /** 破壞性操作（手動結束、結束活動；004 FR-033） */
+  danger: 'bg-danger text-white hover:bg-danger/90',
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

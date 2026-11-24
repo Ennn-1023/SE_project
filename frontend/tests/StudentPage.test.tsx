@@ -83,4 +83,15 @@ describe('StudentPage 登入失效', () => {
     renderPage();
     expect(await screen.findByText('登入頁')).toBeInTheDocument();
   });
+
+  it('沒有進行中的活動時顯示提示，不顯示作答區（004 US1-6、FR-030）', async () => {
+    const none: StudentView = { phase: 'NO_ACTIVITY', serverNow: at(0), myTeam: { teamId: 'T1', name: '第 1 組' } };
+    vi.stubGlobal('fetch', routeFetch({ 'GET /api/student/state': () => json(none) }));
+    const sock = renderPage();
+    sock.connection('online');
+    expect(await screen.findByText('目前沒有進行中的活動，請等待老師開始')).toBeInTheDocument();
+    expect(screen.queryByLabelText('你的答案')).not.toBeInTheDocument();
+    sock.push(waiting(1));
+    expect(screen.getByText('等待老師開放題目')).toBeInTheDocument();
+  });
 });

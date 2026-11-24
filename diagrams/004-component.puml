@@ -1,0 +1,123 @@
+@startuml 004-component
+title F5/F8 組件圖：活動管理與逐題開放控制＋老師即時監控看板
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+
+actor "老師" as Teacher
+actor "學生" as Student
+
+package "前端（瀏覽器，RWD）" as FE {
+  [老師管理頁\nTeacherDashboard] as TeacherPage
+  [搶答活動頁\nActivityControlPage] as ActPage
+  [開始活動面板\nActivityStartPanel] as StartPanel
+  [題目清單\nActivityQuestionList] as QList
+  [開放題目表單\nOpenQuestionForm\n(秒數 5–600，預設 60)] as OpenForm
+  [即時監控看板\nMonitorBoard] as Monitor
+  [結果看板\nResultBoard] as ResultBoard
+  [活動摘要\nActivitySummary] as Summary
+  [老師即時狀態\nuseTeacherActivity] as TeacherHook
+  [伺服器倒數\nuseServerCountdown\n(002)] as Countdown
+  [學生搶答頁\nStudentPage\n(002 擴充：AnsweringView 題組多作答框)] as StudentPage
+  [API 用戶端\nApiClient] as ApiClient
+  [即時連線\nSocketClient] as SocketClient
+}
+
+package "共用規則（shared）" as SH {
+  [活動驗證\nActivityRules\n(validateSeconds / validatePartAnswers)] as Rules
+}
+
+package "後端（伺服器）" as BE {
+  package "路由層" {
+    [ActivityRoutes\n/teacher/activity] as ActRoutes
+    [StudentRoutes\n(002) /student] as StuRoutes
+    [QuestionSetRoutes\n(003) /question-set] as SetRoutes
+    [GroupRoutes\n(001) /groups] as GroupRoutes
+  }
+  package "中介層（001）" {
+    [RequireAuth / RequireRole\n/ Validate / ErrorHandler] as MW
+  }
+  package "服務層" {
+    [ActivityService\n(開始/開放/重新開放/結束/回到等待/結束活動)] as ActSvc
+    [ActivityStateMachine\n(002 擴充：伺服器計時、冪等結束)] as FSM
+    [SubmissionService\n(002 擴充：依小題答案、順位、輪次)] as SubSvc
+    [ResultService\n(002 擴充：結果含結束原因、小題答案)] as ResSvc
+    [MonitorViewBuilder\n(老師視角)] as MonBuilder
+    [VisibilityFilter\n(002：學生視角)] as Vis
+    [ActivityLockGuard\n(題目集鎖定 / 作答中改組)] as Lock
+    [QuestionSetService\n(003)] as SetSvc
+    [GroupService\n(001)] as GroupSvc
+  }
+  package "即時層" {
+    [SocketServer\n(002 擴充：/student、/teacher、在線追蹤)] as Socket
+  }
+  package "資料存取層" {
+    [Repository\n(002 擴充：活動、活動題目、小題、參與組別、\n送出、小題答案、結果、輪次)] as ActRepo
+    [ActivityEventRepository] as EventRepo
+    [QuestionSetRepository\n(003)] as SetRepo
+  }
+  [Logger\n(不記錄機敏資料)] as Logger
+}
+
+database "資料庫" as DB
+
+Teacher --> TeacherPage
+TeacherPage --> ActPage : 搶答活動按鈕
+ActPage --> StartPanel
+ActPage --> QList
+ActPage --> OpenForm
+ActPage --> Monitor
+ActPage --> ResultBoard
+ActPage --> Summary
+ActPage --> TeacherHook
+Monitor --> Countdown
+OpenForm ..> Rules : 秒數即時驗證
+TeacherHook --> ApiClient : 取得完整狀態
+TeacherHook --> SocketClient : 訂閱 teacher:update
+StartPanel --> ApiClient
+OpenForm --> ApiClient
+QList --> ApiClient : 查看已結束題目結果
+Student --> StudentPage
+StudentPage ..> Rules : 小題答案驗證
+StudentPage --> ApiClient
+StudentPage --> SocketClient
+
+ApiClient --> ActRoutes : HTTPS
+ApiClient --> StuRoutes : HTTPS
+SocketClient --> Socket : WebSocket（session cookie）
+
+ActRoutes --> MW
+StuRoutes --> MW
+ActRoutes --> ActSvc
+ActRoutes --> MonBuilder
+StuRoutes --> SubSvc
+SetRoutes --> SetSvc
+GroupRoutes --> GroupSvc
+
+ActSvc --> FSM
+ActSvc --> SetRepo : 讀取題目集快照
+ActSvc --> ActRepo : 活動、題目快照、各組人數與參與組別
+ActSvc --> EventRepo
+ActSvc ..> Rules : 伺服器端驗證
+Lock --> FSM : 讀取目前階段
+SetSvc --> SetRepo
+SetSvc --> Lock : 清除／重新匯入前檢查
+GroupSvc --> Lock : 改組前檢查
+FSM --> SubSvc : onQuestionOpened
+FSM --> ResSvc : onQuestionClosed
+FSM --> Socket : onChange
+SubSvc ..> Rules
+SubSvc --> Socket : 送出被接受
+ResSvc --> ActRepo : 寫入結果並作廢舊輪次
+MonBuilder --> FSM
+MonBuilder --> SubSvc
+MonBuilder --> ActRepo
+Socket --> MonBuilder : 老師連線 → 監控視圖（含在線人數）
+Socket --> Vis : 學生連線 → 學生視圖
+
+ActRepo --> DB
+EventRepo --> DB
+SetRepo --> DB
+ActSvc ..> Logger
+@enduml
