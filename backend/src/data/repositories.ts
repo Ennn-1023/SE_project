@@ -30,7 +30,7 @@ const toQuestion = (r: Row): Question => ({
 /** 組別編號 n ↔ 搶答的 teamId `T{n}`（整合 001 組別管理：組別即 users.group_number）。 */
 export const teamIdOf = (groupNumber: number) => `T${groupNumber}`;
 export function groupNumberOf(teamId: string): number | null {
-  const m = /^T([1-9]d*)$/.exec(teamId);
+  const m = /^T([1-9]\d*)$/.exec(teamId);
   return m ? Number(m[1]) : null;
 }
 const teamOf = (groupNumber: number, activityId: string): Team => ({
