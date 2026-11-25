@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MonitorView } from '@buzzer/shared';
 import { MonitorBoard, PROJECTION_WARNING } from '../src/activity/MonitorBoard';
+import { AnsweringView } from '../src/components/AnsweringView';
+import { answeringView } from './helpers';
 import { detail, row, submitted } from './activityFixtures';
 
 afterEach(() => {
@@ -96,3 +98,32 @@ describe('MonitorBoard（004 US3、FR-015～FR-017）', () => {
     expect(screen.getByRole('button', { name: '處理中…' })).toBeDisabled();
   });
 });
+
+describe('老師看板與學生作答頁的倒數階段一致（007 FR-008、SC-003）', () => {
+  const phases = (endsAt: string) => {
+    const teacher = render(
+      <MonitorBoard
+        question={detail(1)}
+        monitor={monitor()}
+        endsAt={endsAt}
+        clockOffset={0}
+        pending={false}
+        onClose={vi.fn()}
+      />,
+    );
+    const student = render(
+      <AnsweringView view={answeringView({ endsAt })} clockOffset={0} offline={false} />,
+    );
+    const phaseOf = (c: HTMLElement) => c.querySelector('.countdown')?.getAttribute('data-phase');
+    return [phaseOf(teacher.container), phaseOf(student.container)];
+  };
+
+  it('剩 8 秒時兩端都是 urgent（橘）', () => {
+    expect(phases(inFuture(8_000))).toEqual(['urgent', 'urgent']);
+  });
+
+  it('剩 30 秒時兩端都是 normal（深藍）', () => {
+    expect(phases(inFuture(30_000))).toEqual(['normal', 'normal']);
+  });
+});
+

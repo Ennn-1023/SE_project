@@ -1,0 +1,41 @@
+@startuml 007-sequence-countdown
+title 007 時序圖：學生作答頁倒數與最後十秒變橘色
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+
+actor "老師" as T
+participant "搶答活動服務\n(後端)" as S
+participant "useStudentState" as St
+participant "AnsweringView" as AV
+participant "CountdownTimer" as CT
+participant "useServerCountdown" as H
+participant "countdownPhase" as P
+actor "學生" as U
+
+T -> S : 開始搶答（作答秒數 N）
+S -> S : endsAt = 現在 + N 秒
+S --> St : 推播 題目作答中＋endsAt
+St --> AV : view（含 endsAt）、clockOffset
+AV -> CT : endsAt, clockOffset
+
+loop 每 250 毫秒
+  CT -> H : 取得剩餘時間
+  H --> CT : Countdown(remainingSec, expired)
+  CT -> P : countdownPhase(c)
+  alt remainingSec > 10
+    P --> CT : NORMAL
+    CT --> U : 顯示 mm:ss（深藍色）
+  else 1 ≤ remainingSec ≤ 10
+    P --> CT : URGENT
+    CT --> U : 顯示 mm:ss（橘色，與老師看板相同）
+  else expired
+    P --> CT : EXPIRED
+    CT --> U : 「時間到，等待結果」
+  end
+end
+
+S -> S : 時間到，自動結束該題
+S --> St : 推播 題目結束
+St --> AV : 切換到結果畫面
+@enduml

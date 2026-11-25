@@ -179,4 +179,44 @@ describe('AnsweringView（FR-001、FR-014、FR-014a）', () => {
     expect(screen.getByText('（2）答案最多 500 字，目前 501 字，請精簡後再送出')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '送出答案' })).toBeDisabled();
   });
+
+  it('本組已送出後，倒數仍在固定的題號列內（007 FR-011）', () => {
+    const { container } = render(
+      <AnsweringView view={view({ myTeamSubmission: { answer: '已送出的答案' } })} clockOffset={0} offline={false} />,
+    );
+    expect(screen.getByText('本組已送出')).toBeInTheDocument();
+    const timer = screen.getByRole('timer');
+    expect(timer).toHaveTextContent(/00:4[12]/);
+    expect(timer.closest('.answering-head')).not.toBeNull();
+    expect(container.querySelector('section.answering')?.firstElementChild).toHaveClass(
+      'answering-head',
+    );
+  });
+
+  it('題組題時，題號＋倒數列是作答卡片的第一個子元素（007 FR-012 sticky 前提）', () => {
+    const { container } = render(
+      <AnsweringView
+        view={view({
+          question: {
+            questionId: 'Q9',
+            number: 9,
+            label: '9',
+            text: '閱讀下列敘述後回答。',
+            kind: 'GROUP',
+            stem: '閱讀下列敘述後回答。',
+            parts: [
+              { partIndex: 0, partLabel: '（1）', text: '小題一' },
+              { partIndex: 1, partLabel: '（2）', text: '小題二' },
+              { partIndex: 2, partLabel: '（3）', text: '小題三' },
+            ],
+          },
+        })}
+        clockOffset={0}
+        offline={false}
+      />,
+    );
+    const head = container.querySelector('section.answering')?.firstElementChild;
+    expect(head).toHaveClass('answering-head');
+    expect(head).toContainElement(screen.getByRole('timer'));
+  });
 });

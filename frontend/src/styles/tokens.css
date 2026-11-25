@@ -42,6 +42,9 @@
   /* 觸控與版面 */
   --touch-min: 44px;
   --content-max: 720px;
+  /* 007：斷線提示列固定高度；作答頁倒數列高度（作答欄位 scroll-margin-top 用） */
+  --connection-banner-h: 2.5rem;
+  --answering-head-h: 5rem;
   /* 斷點（僅供參考；media query 不能使用變數）：手機 < 640px、平板 640–1024px、桌機 > 1024px */
   --bp-tablet: 640px;
   --bp-desktop: 1024px;

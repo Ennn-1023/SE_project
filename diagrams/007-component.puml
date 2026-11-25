@@ -1,0 +1,46 @@
+@startuml 007-component
+title 007 組件圖：學生作答頁倒數計時與最後十秒變色（與老師端一致）
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+
+actor "學生" as Student
+actor "老師" as Teacher
+
+package "前端（瀏覽器，RWD）" as FE {
+  package "學生端（002）" {
+    [作答畫面\nAnsweringView\n(題號＋倒數列捲動時固定頂端)] as Answering
+    [學生狀態\nuseStudentState\n(endsAt、clockOffset)] as StuState
+    [學生搶答頁\nStudentPage\n(斷線提示列＋作答畫面)] as StuPage
+    [斷線提示列\nConnectionBanner\n(sticky；倒數列在其下方)] as Banner
+  }
+  package "老師端（004，不變更）" {
+    [搶答看板\nMonitorBoard] as Monitor
+  }
+  package "共用倒數（兩端共用同一份規則）" {
+    [倒數元件\nCountdownTimer\n(依階段輸出 data-phase)] as Timer
+    [倒數計算\nuseServerCountdown\n(002，不變)] as Hook
+    [倒數色彩階段\ncountdownPhase()\n(URGENT_SEC = 10；normal／urgent／expired)] as Phase
+    [樣式\nglobal.css／theme.css\n(--color-primary 深藍、--color-accent 橘)] as Css
+  }
+}
+
+package "後端（伺服器，本功能不變更）" as BE {
+  [搶答活動服務\nActivityService\n(004：開始題目、計時、自動結束)] as ActSvc
+  [即時推播\nSocketServer\n(endsAt、題目結束事件)] as Push
+}
+
+Teacher --> ActSvc : 開始搶答（設定作答秒數）
+ActSvc --> Push
+Push --> StuState : 題目狀態＋endsAt
+Student --> StuPage
+StuPage --> StuState
+StuPage --> Banner
+StuPage --> Answering
+Answering --> Timer
+Monitor --> Timer
+Timer --> Hook
+Timer --> Phase
+Timer ..> Css : 依階段套用同一組顏色
+@enduml

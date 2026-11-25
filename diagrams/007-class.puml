@@ -1,0 +1,66 @@
+@startuml 007-class
+title 007 類別圖：倒數元件與色彩階段（學生端與老師端共用）
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+hide empty members
+
+class StudentView <<002>> {
+  +question: QuestionView
+  +endsAt: string
+  +myTeamSubmission: Submission
+}
+
+class AnsweringView <<component>> {
+  view: StudentView
+  clockOffset: number
+  offline: boolean
+  題號＋倒數列 sticky 固定頂端
+}
+
+class MonitorBoard <<component, 004>> {
+  endsAt: string | null
+  clockOffset: number
+}
+
+interface CountdownTimerProps {
+  +endsAt: string
+  +clockOffset: number
+  +expiredText: string
+}
+
+class CountdownTimer <<component>> {
+  props: CountdownTimerProps
+  輸出 data-phase 與 countdown-urgent
+}
+
+interface Countdown <<002>> {
+  +remainingMs: number | null
+  +remainingSec: number
+  +expired: boolean
+}
+
+class useServerCountdown <<hook, 002>> {
+  +useServerCountdown(endsAt, clockOffset): Countdown
+}
+
+enum CountdownPhase {
+  normal（深藍 --color-primary）
+  urgent（橘 --color-accent）
+  expired（等待文字）
+}
+
+class countdownPhase <<function, 新>> {
+  URGENT_SEC = 10（兩端共用）
+  +countdownPhase(c: Countdown): CountdownPhase
+}
+
+AnsweringView --> StudentView
+AnsweringView --> CountdownTimer
+MonitorBoard --> CountdownTimer
+CountdownTimer ..> CountdownTimerProps
+CountdownTimer --> useServerCountdown
+useServerCountdown ..> Countdown : 產生
+CountdownTimer --> countdownPhase
+countdownPhase ..> CountdownPhase : 回傳
+@enduml
