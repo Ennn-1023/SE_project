@@ -236,7 +236,7 @@ Web app：`frontend/src/`、`frontend/tests/`、`backend/tests/`、`diagrams/`�
 - [X] T049 [P] 擴充 `frontend/tests/narrowScreen.test.tsx`：在 360px 寬度下渲染已打開的 `TeacherLayout` 選單，以及有 30 題的 `QuestionOverview`，斷言沒有會造成溢出的固定寬度 class，總覽使用 `flex-wrap`（SC-005）
 - [X] T050 手動比對 `diagrams/006-sequence-navigation.puml`、`diagrams/006-sequence-annotation-paging.puml` 與實際的呼叫順序（憲章 VI 時序圖驗證），結果記在完成回報
 - [X] T051 執行 `npm test`、`npm run typecheck`、`npm run lint`；只對本功能改過的檔案執行 `npx prettier --check`，必要時 `--write`
-- [ ] T052 依 `specs/006-teacher-nav-annotation-paging/quickstart.md` §3 走過手動驗證情境 1～7，記錄做到哪些、沒做到哪些（例如真實手機只用模擬器）
+- [X] T052 依 `specs/006-teacher-nav-annotation-paging/quickstart.md` §3 走過手動驗證情境 1～7，記錄做到哪些、沒做到哪些（例如真實手機只用模擬器）
 
 ---
 
