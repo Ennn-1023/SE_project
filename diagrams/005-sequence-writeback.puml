@@ -16,7 +16,7 @@ participant "WritebackService" as WS
 participant "ActivityResultReader" as RD
 participant "SheetsService\n(003)" as SS
 participant "AnnotationCodec\n(003)" as AC
-participant "GoogleSheetsGateway" as GW
+participant "SheetsGateway\n(003)" as GW
 database "Repository" as DB
 
 == 寫回預覽 ==

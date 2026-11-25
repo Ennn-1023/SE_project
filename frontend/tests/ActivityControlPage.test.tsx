@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../src/api/apiClient';
@@ -232,3 +232,35 @@ describe('ActivityControlPage：session 逾時（004 Edge Case、T081）', () =>
   });
 });
 
+
+describe('ActivityControlPage：寫回與匯出入口（005 US4、FR-026）', () => {
+  it('從未開始活動：兩個入口停用並說明原因（US4-2）', async () => {
+    vi.spyOn(api, 'getActivity').mockResolvedValue(noneView());
+    renderPage().connection('online');
+    expect(await screen.findByText('尚無搶答活動結果可寫回或匯出')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '寫回 Google 試算表' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '匯出結果 CSV' })).toBeDisabled();
+  });
+
+  it('活動進行中也可使用：按「寫回 Google 試算表」開啟預覽對話框（FR-002）', async () => {
+    vi.spyOn(api, 'getActivity').mockResolvedValue(teacherView({ phase: 'ANSWERING' }));
+    const preview = vi.spyOn(api, 'writebackPreview').mockReturnValue(new Promise(() => undefined));
+    renderPage().connection('online');
+    const button = await screen.findByRole('button', { name: '寫回 Google 試算表' });
+    expect(button).toBeEnabled();
+    expect(screen.getByRole('button', { name: '匯出結果 CSV' })).toBeEnabled();
+    await userEvent.setup().click(button);
+    expect(screen.getByRole('dialog', { name: '寫回 Google 試算表' })).toBeInTheDocument();
+    expect(preview).toHaveBeenCalledOnce();
+  });
+
+  it('活動結束摘要醒目提供寫回與匯出（FR-026）', async () => {
+    vi.spyOn(api, 'getActivity').mockResolvedValue(teacherView({ phase: 'ENDED' }));
+    const download = vi.spyOn(api, 'downloadResultsCsv').mockResolvedValue('搶答結果.csv');
+    renderPage().connection('online');
+    const summary = await screen.findByLabelText('保存本場結果');
+    expect(within(summary).getByRole('button', { name: '寫回 Google 試算表' })).toBeEnabled();
+    await userEvent.setup().click(within(summary).getByRole('button', { name: '匯出結果 CSV' }));
+    expect(download).toHaveBeenCalledOnce();
+  });
+});

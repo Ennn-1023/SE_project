@@ -23,6 +23,20 @@ export interface Activity {
   sourceTitle: string | null;
   /** 重啟取消作答等提示（research.md R5） */
   notice: string | null;
+  /**
+   * 寫回目標（005 data-model.md §1.1 activities.*）：開始活動時的來源試算表與分頁。
+   * 002 mock 活動與 v5 之前的活動為 null；建立後不再變更。
+   */
+  source?: ActivitySource | null;
+}
+
+/** 005 data-model.md §1.1 */
+export interface ActivitySource {
+  spreadsheetId: string;
+  spreadsheetTitle: string;
+  sheetId: number;
+  sheetTitle: string;
+  sourceUrl: string;
 }
 
 /** 002 的題目（學生視角使用） */

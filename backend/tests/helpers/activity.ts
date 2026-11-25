@@ -4,7 +4,13 @@
  * 並提供老師 REST 操作與 /teacher socket。
  */
 import { io, type Socket } from 'socket.io-client';
-import type request from 'supertest';
+import request from 'supertest';
+import type { FakeGoogle } from './fakeGoogle';
+import { FakeGoogle as FakeGoogleImpl } from './fakeGoogle';
+import { connectGoogle, loginAs } from './testApp';
+import { importSheet, groupAnnotations, singleAnnotations } from './annotations';
+import { SHEET_TITLE, SINGLE_ID, SINGLE_URL, singleSheet } from '../fixtures/google/single-sheet';
+import { GROUP_ID, GROUP_URL, groupSheet } from '../fixtures/google/group-sheet';
 import type { TeacherActivityView } from '@buzzer/shared';
 import type { QuestionSetRecord } from '../../src/domain/questionTypes';
 import { startTestServer, type SessionCookie, type TestServer } from './testServer';
@@ -81,13 +87,41 @@ export interface ActivityTestServer extends TestServer {
   startActivity(): Promise<string>;
   connectTeacher(cookie?: SessionCookie): Promise<TeacherClient>;
   submitAnswers(cookie: SessionCookie, questionId: string, answers: unknown[]): Promise<request.Response>;
+  /**
+   * 以學生帳號依序送出後結束題目（005）：submissions 依陣列順序決定順位；
+   * 空陣列代表無人送出。回傳 questionId。
+   */
+  answer(
+    position: number,
+    submissions: [studentId: string, answers: string[]][],
+    opts?: { reopen?: boolean; close?: boolean },
+  ): Promise<string>;
+  /** 目前開始的活動 id（startActivity 後） */
+  activityId: string | null;
+  /** 已登入老師的 cookie agent（連結 Google、匯入學習單用；005） */
+  teacherAgent(): Promise<ReturnType<typeof request.agent>>;
+  /** 老師以 FakeGoogle 完成授權（005） */
+  connectGoogle(google: FakeGoogle): Promise<ReturnType<typeof request.agent>>;
 }
 
 /** 啟動伺服器（不建立 mock 活動），預設寫入 3 題的虛構題目集 */
 export async function startActivityServer(
-  options: { seed?: boolean; env?: Record<string, string> } = {},
+  options: { seed?: boolean; env?: Record<string, string>; google?: FakeGoogle } = {},
 ): Promise<ActivityTestServer> {
-  const ts = await startTestServer(options.env ?? {}, { mockActivity: false });
+  const ts = await startTestServer(options.env ?? {}, {
+    mockActivity: false,
+    ...(options.google ? { google: options.google } : {}),
+  });
+  const studentCookies = new Map<string, SessionCookie>();
+  const cookieOf = async (studentId: string) => {
+    let c = studentCookies.get(studentId);
+    if (!c) {
+      c = await ts.loginAs(studentId);
+      studentCookies.set(studentId, c);
+    }
+    return c;
+  };
+  let agent: ReturnType<typeof request.agent> | null = null;
   const sockets: Socket[] = [];
   const as = (cookie?: SessionCookie) => cookie ?? ts.teacherCookie;
   const post = (path: string, body: object = {}, cookie?: SessionCookie) =>
@@ -117,10 +151,46 @@ export async function startActivityServer(
     seedQuestionSet(record = sampleQuestionSet()) {
       ts.server.container.repos.questionSets.replace(record);
     },
+    activityId: null,
     async startActivity() {
       const res = await post('/start');
       if (res.status !== 200) throw new Error(`start failed: ${res.status} ${JSON.stringify(res.body)}`);
-      return (res.body as TeacherActivityView).activity!.id;
+      server.activityId = (res.body as TeacherActivityView).activity!.id;
+      return server.activityId;
+    },
+    async answer(position, submissions, opts = {}) {
+      const questionId = `${server.activityId}-${position}`;
+      const opened = opts.reopen
+        ? await server.api.reopen(questionId, 60, true)
+        : await server.api.open(questionId, 60);
+      if (opened.status !== 200) throw new Error(`open failed: ${opened.status} ${JSON.stringify(opened.body)}`);
+      for (const [studentId, answers] of submissions) {
+        const res = await server.submitAnswers(await cookieOf(studentId), questionId, answers);
+        if (res.status !== 200 && res.status !== 201) {
+          throw new Error(`submit failed: ${res.status} ${JSON.stringify(res.body)}`);
+        }
+        // 確保送出時間嚴格遞增，順位與陣列順序一致
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      if (opts.close !== false) {
+        const closed = await server.api.close();
+        if (closed.status !== 200) throw new Error(`close failed: ${closed.status}`);
+      }
+      return questionId;
+    },
+    async teacherAgent() {
+      if (!agent) {
+        agent = request.agent(ts.url);
+        const { config } = ts.server.container;
+        await loginAs(agent, config.teacherAccount, config.teacherInitialPassword);
+      }
+      return agent;
+    },
+    async connectGoogle(google) {
+      const a = await server.teacherAgent();
+      const res = await connectGoogle(google, a);
+      if (res.status !== 302) throw new Error(`connectGoogle failed: ${res.status}`);
+      return a;
     },
     connectTeacher(cookie) {
       return new Promise((resolve, reject) => {
@@ -174,4 +244,67 @@ export async function startActivityServer(
   };
   if (options.seed !== false) server.seedQuestionSet();
   return server;
+}
+
+/** 005 寫回／匯出 API（老師 cookie） */
+export interface WritebackApi {
+  preview(cookie?: SessionCookie): Promise<request.Response>;
+  confirm(body: unknown, cookie?: SessionCookie): Promise<request.Response>;
+  csv(cookie?: SessionCookie): Promise<request.Response>;
+}
+
+export function writebackApi(t: ActivityTestServer): WritebackApi {
+  const as = (cookie?: SessionCookie) => cookie ?? t.teacherCookie;
+  return {
+    preview: (cookie) => t.http.post('/api/teacher/activity/writeback/preview').set('Cookie', as(cookie)),
+    confirm: (body, cookie) =>
+      t.http.post('/api/teacher/activity/writeback/confirm').set('Cookie', as(cookie)).send(body as object),
+    csv: (cookie) =>
+      t.http
+        .get('/api/teacher/activity/export.csv')
+        .set('Cookie', as(cookie))
+        .buffer(true)
+        .parse((res, cb) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c: Buffer) => chunks.push(c));
+          res.on('end', () => cb(null, Buffer.concat(chunks).toString('utf8')));
+        }),
+  };
+}
+
+export interface WritebackServer {
+  t: ActivityTestServer;
+  google: FakeGoogleImpl;
+  wb: WritebackApi;
+  spreadsheetId: string;
+  sheetTitle: string;
+  /** 老師的 cookie agent（已連結 Google） */
+  agent: ReturnType<typeof request.agent>;
+}
+
+/**
+ * 005 寫回整合測試：以 FakeGoogle 的範例學習單（虛構內容）連結 Google、匯入標註並開始活動。
+ * 單題範例 6 題作答格 G5、G7…G15（G～H 合併）；題組範例第 1、2 題各 2 小題（H 欄）、第 3、4 題單題（G 欄）。
+ */
+export async function startWritebackServer(
+  kind: 'single' | 'group' = 'single',
+  options: { start?: boolean } = {},
+): Promise<WritebackServer> {
+  const google = new FakeGoogleImpl().addSpreadsheet(kind === 'single' ? singleSheet() : groupSheet());
+  const t = await startActivityServer({ seed: false, google });
+  const agent = await t.connectGoogle(google);
+  await importSheet(
+    agent,
+    kind === 'single' ? SINGLE_URL : GROUP_URL,
+    kind === 'single' ? singleAnnotations() : groupAnnotations(),
+  );
+  if (options.start !== false) await t.startActivity();
+  return {
+    t,
+    google,
+    wb: writebackApi(t),
+    spreadsheetId: kind === 'single' ? SINGLE_ID : GROUP_ID,
+    sheetTitle: SHEET_TITLE,
+    agent,
+  };
 }

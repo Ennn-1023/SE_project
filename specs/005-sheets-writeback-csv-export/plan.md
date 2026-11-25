@@ -129,7 +129,7 @@ frontend/tests/WritebackPreviewDialog.test.tsx、ExportCsvButton.test.tsx、Acti
 | 組件 | 檔案 | 組件 | 檔案 |
 |------|------|------|------|
 | ActivityControlPage | `frontend/src/pages/ActivityControlPage.tsx` | ResultExportRoutes | `backend/src/routes/resultExportRoutes.ts` |
-| ActivitySummary | `frontend/src/activity/ActivitySummary.tsx` | RequireAuth / RequireRole / Validate / ErrorHandler | `backend/src/middleware/requireAuth.ts`、`requireRole.ts`、`validate.ts`、`errorHandler.ts` |
+| ActivitySummary | `frontend/src/activity/ActivitySummary.tsx` | RequireAuth / RequireRole | `backend/src/middleware/requireAuth.ts`、`backend/src/middleware/requireRole.ts`、`backend/src/middleware/validate.ts`、`backend/src/middleware/errorHandler.ts` |
 | WritebackPreviewDialog | `frontend/src/activity/WritebackPreviewDialog.tsx` | ActivityResultReader | `backend/src/services/activityResultReader.ts` |
 | WritebackResultPanel | `frontend/src/activity/WritebackResultPanel.tsx` | WritebackService | `backend/src/services/writebackService.ts` |
 | ExportCsvButton | `frontend/src/activity/ExportCsvButton.tsx` | CsvExportService | `backend/src/services/csvExportService.ts` |
@@ -137,7 +137,7 @@ frontend/tests/WritebackPreviewDialog.test.tsx、ExportCsvButton.test.tsx、Acti
 | WritebackRules | `shared/src/resultExport.ts` | SheetsService | `backend/src/services/sheetsService.ts`（003） |
 | AnnotationCodec | `backend/src/domain/annotationCodec.ts`（003） | ActivityService | `backend/src/services/activityService.ts`（004） |
 | Repository | `backend/src/data/repositories.ts`（004） | WritebackTargetRepository | `backend/src/db/writebackTargetRepository.ts` |
-| ExportEventRepository | `backend/src/db/exportEventRepository.ts` | GoogleSheetsGateway | `backend/src/integrations/google/sheetsGateway.ts`（003） |
+| ExportEventRepository | `backend/src/db/exportEventRepository.ts` | SheetsGateway | `backend/src/integrations/google/sheetsGateway.ts`（003） |
 | Logger | `backend/src/lib/logger.ts` | 資料庫 | SQLite（`backend/src/lib/db.ts`） |
 
 `WritebackRules` 以 `export const WritebackRules = { validateOverwriteMode, validateFallbackKeys }` 匯出。`CsvEncoder` 以 `export const CsvEncoder = { encode, escapeField, neutralizeFormula }` 匯出（純函式）。
@@ -147,7 +147,7 @@ frontend/tests/WritebackPreviewDialog.test.tsx、ExportCsvButton.test.tsx、Acti
 | 類別圖元素 | 程式位置 |
 |-----------|----------|
 | `WritebackItemStatus`、`SkipReason`、`OverwriteMode`、`WritebackRules` | `shared/src/resultExport.ts` |
-| `WritebackPreview`、`WritebackItem`、`SkippedQuestion`、`WritebackSummary`、`WritebackOutcome` | `shared/src/resultExport.ts`（DTO：`…View`）；伺服器內部狀態在 `writebackService.ts` |
+| `WritebackPreview`、`WritebackItem`、`SkippedQuestion`、`WritebackSummary`、`WritebackOutcome`、`SkippedReasonCount`、`PreviewState` | `backend/src/services/writebackService.ts`（伺服器內部狀態；API DTO 為 `shared/src/resultExport.ts` 的 `…View`） |
 | `CsvQuestionStatus`、`CsvResultRow` | `backend/src/services/csvExportService.ts` |
 | `WritebackTarget`、`AnswerSlotFallback` | `backend/src/db/writebackTargetRepository.ts`（資料表見 data-model §1.1、§1.2） |
 | `ExportEvent`、`ExportEventType` | `backend/src/db/exportEventRepository.ts` |

@@ -1,12 +1,16 @@
 import type { TeacherActivityView } from '@buzzer/shared';
+import { Button } from '../components/Button';
+import { ExportCsvButton } from './ExportCsvButton';
 
 interface Props {
   view: TeacherActivityView;
   onViewResult: (questionId: string) => void;
+  /** 開啟寫回預覽（005 FR-026） */
+  onWriteback?: () => void;
 }
 
 /** ActivitySummary（004 US5-3）：活動結束後的摘要——題數、已完成題數、各題搶答成功組別 */
-export function ActivitySummary({ view, onViewResult }: Props) {
+export function ActivitySummary({ view, onViewResult, onWriteback }: Props) {
   return (
     <section className="flex flex-col gap-3" aria-label="活動摘要">
       <p className="rounded-lg bg-cream-100 p-3 font-bold">
@@ -30,6 +34,20 @@ export function ActivitySummary({ view, onViewResult }: Props) {
           </li>
         ))}
       </ul>
+      {onWriteback ? (
+        <div
+          className="flex flex-col gap-2 rounded-lg border-2 border-primary/40 bg-cream-100 p-3"
+          aria-label="保存本場結果"
+        >
+          <p className="font-bold">保存本場結果</p>
+          <div className="flex flex-wrap items-start gap-2">
+            <Button variant="primary" onClick={onWriteback}>
+              寫回 Google 試算表
+            </Button>
+            <ExportCsvButton />
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

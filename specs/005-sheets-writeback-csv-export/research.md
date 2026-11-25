@@ -20,7 +20,7 @@
   - `ActivityService.startActivity` 在建立題目快照時一併寫入（`record.set.source` 與 `slots[].answerCell`）。
 - **Rationale**: FR-005 要求本場活動開始後重新匯入題目集不影響寫回目標；題目快照本來就在 `startActivity` 的同一個交易建立，加欄位即可，不需新表。
 - **Alternatives considered**: 寫回時讀 `question_sets`（目前題目集）→ 活動結束後老師可能已重新匯入別份學習單，違反 FR-005，否決。另建 `writeback_targets` 表 → 與 `activities` 一對一，徒增 join，否決；類別圖的 `WritebackTarget`／`AnswerSlotFallback` 以 `WritebackTargetRepository` 讀取這些欄位呈現。
-- **無來源的活動**：寫回回覆 `WRITEBACK_NO_SOURCE`「本場活動的題目不是從 Google 試算表匯入，無法寫回」；CSV 不受影響。
+- **無來源的活動**：寫回回覆 `WRITEBACK_NO_SOURCE`「本場活動沒有記錄來源試算表，無法寫回」（含 v5 前開始的活動與非匯入題目的活動）；CSV 不受影響。
 
 ## R3. 依標註定位作答格（找不到／重複）
 
@@ -97,7 +97,7 @@
 | 碼 | HTTP | 訊息（hint） |
 |----|------|--------------|
 | `NO_ACTIVITY_RESULTS` | 404 | 尚無搶答活動結果可寫回或匯出（請先開始活動並完成至少一題） |
-| `WRITEBACK_NO_SOURCE` | 409 | 本場活動的題目不是從 Google 試算表匯入，無法寫回（可改用匯出 CSV） |
+| `WRITEBACK_NO_SOURCE` | 409 | 本場活動沒有記錄來源試算表，無法寫回（寫回功能上線前開始或非匯入題目的活動；可改用匯出 CSV） |
 | `WRITEBACK_NOTHING_TO_WRITE` | 409 | 本場活動沒有搶答成功的答案可寫回（可先匯出 CSV 保存結果） |
 | `WRITEBACK_NOT_THIS_SHEET` | 409 | 這份學習單上找不到本場活動的作答格標註（請確認是否為本場活動使用的學習單：<名稱>） |
 | `WRITEBACK_PREVIEW_EXPIRED` | 410 | 預覽已失效（請重新預覽） |

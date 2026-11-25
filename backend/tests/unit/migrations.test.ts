@@ -150,7 +150,7 @@ describe('migration version 4（004 data-model.md §1）', () => {
 
   it('升級後舊資料為第 1 輪、未作廢，A1 標為結束，題目與小題回填（正常）', () => {
     const db = legacyDb();
-    expect(migrate(db, new Date('2026-11-24T00:00:00Z'))).toEqual([4]);
+    expect(migrate(db, new Date('2026-11-24T00:00:00Z'), 4)).toEqual([4]);
     expect(db.prepare(`SELECT phase, ended_at FROM activities WHERE id = 'A1'`).get()).toEqual({
       phase: 'ENDED',
       ended_at: Date.parse('2026-11-24T00:00:00Z'),
@@ -169,7 +169,7 @@ describe('migration version 4（004 data-model.md §1）', () => {
     ]);
     expect(db.prepare(`SELECT COUNT(*) AS n FROM question_parts`).get()).toEqual({ n: 2 });
     expect(db.prepare(`SELECT answer FROM result_parts`).all()).toEqual([{ answer: '答案二' }]);
-    expect(migrate(db)).toEqual([]);
+    expect(migrate(db, new Date(), 4)).toEqual([]);
   });
 
   it('同一題只能有一筆未作廢的結果（question_results.voided 部分唯一索引，邊界）', () => {
@@ -201,5 +201,86 @@ describe('migration version 4（004 data-model.md §1）', () => {
         .run(answer);
     expect(() => part('a'.repeat(501))).toThrow();
     expect(() => part('')).toThrow();
+  });
+});
+
+describe('migration version 5（005 data-model.md §1）', () => {
+  /** v1～v4 的舊資料庫：一場已開始的活動與一題（無來源） */
+  function v4Db() {
+    const db = openDatabase(':memory:');
+    migrate(db, new Date('2026-11-20T00:00:00Z'), 4);
+    db.exec(`
+      INSERT INTO users (account, display_name, role, password_hash, using_default_password, created_at, updated_at)
+        VALUES ('teacher', '老師', 'TEACHER', 'x', 0, 't', 't');
+      INSERT INTO activities (id, phase, started_at, updated_at) VALUES ('ACT-1', 'ENDED', 1, 1);
+      INSERT INTO questions (question_id, activity_id, number, text) VALUES ('ACT-1-1', 'ACT-1', 1, '題目一');
+      INSERT INTO question_parts (question_id, part_index, question_text) VALUES ('ACT-1-1', 0, '題目一');
+    `);
+    return db;
+  }
+  const setSource = (db: ReturnType<typeof v4Db>, values: unknown[]) =>
+    db
+      .prepare(
+        `UPDATE activities SET spreadsheet_id = ?, spreadsheet_title = ?, sheet_id = ?, sheet_title = ?, source_url = ?
+         WHERE id = 'ACT-1'`,
+      )
+      .run(...(values as never[]));
+  const FULL = [SHEET_ID, '學習單', 0, '學習單', 'https://docs.google.com/x'];
+
+  it('升級後既有活動保留且來源為 NULL，新表與欄位存在（正常）', () => {
+    const db = v4Db();
+    expect(migrate(db)).toEqual([5]);
+    expect(
+      db.prepare(`SELECT id, spreadsheet_id, source_url FROM activities`).all(),
+    ).toEqual([{ id: 'ACT-1', spreadsheet_id: null, source_url: null }]);
+    expect(db.prepare(`SELECT answer_cell FROM question_parts`).get()).toEqual({ answer_cell: null });
+    expect(db.prepare(`SELECT COUNT(*) AS n FROM export_events`).get()).toEqual({ n: 0 });
+    expect(migrate(db)).toEqual([]);
+  });
+
+  it('來源五個欄位必須同時為 NULL 或同時有值（activities CHECK，邊界）', () => {
+    const db = v4Db();
+    migrate(db);
+    expect(() => setSource(db, FULL)).not.toThrow();
+    expect(() => setSource(db, [SHEET_ID, '學習單', 0, '學習單', null])).toThrow();
+    expect(() => setSource(db, [null, null, null, null, 'https://x'])).toThrow();
+    expect(() => setSource(db, ['short', '學習單', 0, '學習單', 'https://x'])).toThrow();
+    expect(() => setSource(db, [SHEET_ID, '學習單', -1, '學習單', 'https://x'])).toThrow();
+    expect(() => setSource(db, [null, null, null, null, null])).not.toThrow();
+  });
+
+  it.each([
+    ['G9', true],
+    ['AB12', true],
+    ['XFD1048576', true],
+    ['g9', false],
+    ['9G', false],
+    ['G0', false],
+    ['G', false],
+    ['G9A', false],
+    ['G 9', false],
+  ])('question_parts.answer_cell「%s」→ %s（A1 格式，邊界）', (cell, ok) => {
+    const db = v4Db();
+    migrate(db);
+    const run = () => db.prepare(`UPDATE question_parts SET answer_cell = ?`).run(cell);
+    if (ok) expect(run).not.toThrow();
+    else expect(run).toThrow();
+  });
+
+  it('export_events 的類型、計數與 failure_code 約束（邊界）', () => {
+    const db = v4Db();
+    migrate(db);
+    const ins = (type: string, written: number, failure: string | null) =>
+      db
+        .prepare(
+          `INSERT INTO export_events (at, actor_id, activity_id, type, written, failure_code)
+           VALUES ('t', 1, 'ACT-1', ?, ?, ?)`,
+        )
+        .run(type, written, failure);
+    expect(() => ins('CSV_EXPORTED', 0, null)).not.toThrow();
+    expect(() => ins('WRITEBACK_FAILED', 0, 'WRITEBACK_STALE')).not.toThrow();
+    expect(() => ins('WRITEBACK_SUCCEEDED', 0, 'X')).toThrow();
+    expect(() => ins('DELETED', 0, null)).toThrow();
+    expect(() => ins('CSV_EXPORTED', -1, null)).toThrow();
   });
 });

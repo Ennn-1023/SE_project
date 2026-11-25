@@ -47,6 +47,9 @@ import { ActivityLockGuard } from './services/activityLockGuard.js';
 import { ActivityEventRepository } from './db/activityEventRepository.js';
 import { activityRoutes } from './routes/activityRoutes.js';
 import { SheetsService } from './services/sheetsService.js';
+import { ExportEventRepository } from './db/exportEventRepository.js';
+import { WritebackTargetRepository } from './db/writebackTargetRepository.js';
+import { resultExportRoutes } from './routes/resultExportRoutes.js';
 
 export interface AppDeps {
   config: Config;
@@ -96,6 +99,9 @@ export function createContainer(deps: AppDeps) {
     logger,
   });
   const codec = new AnnotationCodec();
+  // 005：寫回目標與寫回／匯出紀錄
+  const writebackTargets = new WritebackTargetRepository(deps.db);
+  const exportEvents = new ExportEventRepository(deps.db);
   // F10 用：依標註取得每個作答格目前的位置
   const sheets = new SheetsService(googleAuth, sheetsGateway, logger, (entries, grid) =>
     codec
@@ -144,9 +150,10 @@ export function createContainer(deps: AppDeps) {
     config: deps.config,
     db: deps.db,
     clock,
+    codec,
     hasher,
     logger,
-    repos,
+    repos: { ...repos, writebackTargets, exportEvents },
     services,
     activityLock,
     runInTransaction,
@@ -213,6 +220,16 @@ export function createApp(deps: CreateAppOptions) {
     const auth = requireAuth(services.sessions, repos.users);
     // 學生搶答 API：以 001 的 session 登入，只限學生
     api.use('/student', auth, requireRole('STUDENT'), studentRouter(deps.buzzer));
+    // 答案寫回與結果匯出（005 contracts/openapi.yaml；與 004 共用 /teacher/activity 前綴）
+    api.use(
+      '/teacher/activity',
+      resultExportRoutes({
+        writeback: deps.buzzer.writeback,
+        csv: deps.buzzer.csvExport,
+        sessions: services.sessions,
+        users: repos.users,
+      }),
+    );
     // 老師活動控制與監控（004 contracts/openapi.yaml）
     api.use(
       '/teacher/activity',

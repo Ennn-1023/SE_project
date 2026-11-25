@@ -119,4 +119,49 @@ describe('開始活動（004 US1、FR-001～FR-003）', () => {
     expect(res.status).toBe(409);
     expect(res.body.error).toMatchObject({ code: 'NO_ACTIVITY', message: '目前沒有進行中的活動' });
   });
+
+  it('記錄寫回目標與作答格後備位置，之後重新匯入不影響本場（005 FR-005）', async () => {
+    t = await startActivityServer();
+    const id = await t.startActivity();
+    const activityRow = () =>
+      t.db
+        .prepare(
+          `SELECT spreadsheet_id, spreadsheet_title, sheet_id, sheet_title, source_url FROM activities WHERE id = ?`,
+        )
+        .get(id);
+    const cells = () =>
+      t.db
+        .prepare(
+          `SELECT q.number, p.part_index, p.answer_cell FROM question_parts p
+           JOIN questions q ON q.question_id = p.question_id WHERE q.activity_id = ? ORDER BY q.number, p.part_index`,
+        )
+        .all(id);
+    const expectedSource = {
+      spreadsheet_id: 'x'.repeat(30),
+      spreadsheet_title: '測試學習單',
+      sheet_id: 0,
+      sheet_title: '學習單',
+      source_url: 'https://docs.google.com/spreadsheets/d/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/edit',
+    };
+    const expectedCells = [
+      { number: 1, part_index: 0, answer_cell: 'G5' },
+      { number: 2, part_index: 0, answer_cell: 'H10' },
+      { number: 2, part_index: 1, answer_cell: 'H11' },
+      { number: 3, part_index: 0, answer_cell: 'G15' },
+    ];
+    expect(activityRow()).toEqual(expectedSource);
+    expect(cells()).toEqual(expectedCells);
+
+    // 重新匯入另一份學習單並結束活動：本場寫回目標不變
+    const other = sampleQuestionSet(1);
+    other.set.source = { ...other.set.source, spreadsheetId: 'y'.repeat(30), spreadsheetTitle: '另一份' };
+    t.server.container.repos.questionSets.replace(other);
+    await t.api.end();
+    expect(activityRow()).toEqual(expectedSource);
+    expect(cells()).toEqual(expectedCells);
+    expect(t.server.ctx.repo.getCurrentActivity()?.source).toMatchObject({
+      spreadsheetId: 'x'.repeat(30),
+      sheetTitle: '學習單',
+    });
+  });
 });

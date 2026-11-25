@@ -2,6 +2,9 @@
 import type {
   ResultBoardView,
   TeacherActivityView,
+  WritebackConfirmBody,
+  WritebackOutcomeView,
+  WritebackPreviewView,
   AnnotationDocument,
   GridSnapshot,
   QuestionSetView,
@@ -230,4 +233,71 @@ export const api = {
     client.get<ResultBoardView>(
       `/teacher/activity/questions/${encodeURIComponent(questionId)}/result`,
     ),
+  // 005：答案寫回 Google 試算表、匯出結果 CSV（specs/005-sheets-writeback-csv-export/contracts/openapi.yaml）
+  writebackPreview: () => client.post<WritebackPreviewView>('/teacher/activity/writeback/preview'),
+  writebackConfirm: (body: WritebackConfirmBody) =>
+    client.post<WritebackOutcomeView>('/teacher/activity/writeback/confirm', body),
+  downloadResultsCsv: () => downloadResultsCsv(),
 };
+
+/** 從 Content-Disposition 取出檔名（優先 filename*=UTF-8''…） */
+export function filenameFromDisposition(header: string | null): string {
+  const star = header ? /filename\*=UTF-8''([^;]+)/i.exec(header) : null;
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1]);
+    } catch {
+      /* 改用 ASCII 檔名 */
+    }
+  }
+  const plain = header ? /filename="([^"]+)"/i.exec(header) : null;
+  return plain?.[1] ?? 'activity-results.csv';
+}
+
+/**
+ * 下載結果 CSV（005 research R11）：以 fetch 取得，成功時轉 Blob 觸發下載；
+ * 失敗時解析一致的錯誤格式，讓畫面顯示原因而不是下載一份錯誤內容。回傳檔名。
+ */
+export async function downloadResultsCsv(
+  fetchImpl: FetchLike = (i, init) => fetch(i, init),
+): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetchImpl('/api/teacher/activity/export.csv', { credentials: 'same-origin' });
+  } catch {
+    throw new ApiError(
+      0,
+      'NETWORK_ERROR',
+      '無法連線到伺服器',
+      undefined,
+      '請確認網路連線後再試一次',
+    );
+  }
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: Record<string, unknown> } | null;
+    const e = data?.error;
+    const err = new ApiError(
+      res.status,
+      typeof e?.code === 'string' ? e.code : 'UNKNOWN_ERROR',
+      typeof e?.message === 'string' ? e.message : '系統發生錯誤，請稍後再試',
+      typeof e?.field === 'string' ? e.field : undefined,
+      typeof e?.hint === 'string' ? e.hint : undefined,
+    );
+    if (err.code === 'UNAUTHENTICATED') authEvents.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
+    throw err;
+  }
+  const filename = filenameFromDisposition(res.headers.get('Content-Disposition'));
+  const url = URL.createObjectURL(await res.blob());
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  return filename;
+}

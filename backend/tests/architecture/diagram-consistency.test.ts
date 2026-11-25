@@ -1,9 +1,10 @@
 /**
  * 設計圖與程式碼一致性驗證（憲章原則 VI、001 research R15／tasks T077、003 tasks T088）。
- * 解析 diagrams/001-*、003-*、004-* 的組件圖與類別圖，依各功能 plan.md「設計圖對照表」與
+ * 解析 diagrams/001-*、003-*、004-*、005-* 的組件圖與類別圖，依各功能 plan.md「設計圖對照表」與
  * 「基礎設施檔案允許清單」確認：
  *  1. 每個組件／類別在對照的檔案中存在並匯出同名符號；
- *  2. 服務、repository 介面、外部整合、PasswordHasher、Clock 的公開方法與類別圖完全一致；
+ *  2. 服務、repository 介面、外部整合、PasswordHasher、Clock 的公開方法與類別圖完全一致
+ *     （類別圖中 `-` 開頭的私有方法須存在於類別中；標記 <<003>> 等既有功能的類別只需包含圖上列出的方法）；
  *  3. 類別圖中的主要屬性存在於對應型別；
  *  4. routes／services／db／middleware／integrations 下沒有圖表與允許清單以外的檔案。
  * 時序圖的呼叫順序以各功能的 quickstart／驗證文件手動比對（001 T083、003 T089）。
@@ -55,7 +56,10 @@ interface DiagramComponent {
 interface DiagramClass {
   kind: 'class' | 'interface' | 'enum';
   name: string;
+  /** 例如 <<003>>：引用既有功能的類別，只列出本功能使用的方法 */
+  stereotype: string | null;
   methods: string[];
+  privateMethods: string[];
   attributes: string[];
   staticMethods: string[];
 }
@@ -81,17 +85,19 @@ function parseComponents(puml: string): DiagramComponent[] {
 function parseClasses(puml: string): DiagramClass[] {
   const classes: DiagramClass[] = [];
   for (const m of puml.matchAll(
-    /^[ \t]*(abstract class|class|interface|enum)\s+(\w+)(?:\s+<<[^>]+>>)?\s*(\{([\s\S]*?)^[ \t]*\})?/gm,
+    /^[ \t]*(abstract class|class|interface|enum)\s+(\w+)(?:\s+<<([^>]+)>>)?\s*(\{([\s\S]*?)^[ \t]*\})?/gm,
   )) {
-    const body = m[4] ?? '';
+    const body = m[5] ?? '';
     const lines = body.split('\n').map((l) => l.trim());
     const kind = m[1] === 'abstract class' ? 'class' : (m[1] as DiagramClass['kind']);
     classes.push({
       kind,
       name: grp(m, 2),
-      methods: lines
-        .filter((l) => /^[+-]\w+\(/.test(l))
-        .map((l) => grp(l.match(/^[+-](\w+)\(/)!, 1)),
+      stereotype: m[3] ?? null,
+      methods: lines.filter((l) => /^\+\w+\(/.test(l)).map((l) => grp(l.match(/^\+(\w+)\(/)!, 1)),
+      privateMethods: lines
+        .filter((l) => /^-\w+\(/.test(l))
+        .map((l) => grp(l.match(/^-(\w+)\(/)!, 1)),
       staticMethods: lines
         .filter((l) => /^\{static\}\s*[+-]\w+\(/.test(l))
         .map((l) => grp(l.match(/(\w+)\(/)!, 1)),
@@ -149,6 +155,11 @@ const set004 = loadDiagramSet(
   'specs/004-activity-control-monitor/plan.md',
   'diagrams/004-component.puml',
   'diagrams/004-class.puml',
+);
+const set005 = loadDiagramSet(
+  'specs/005-sheets-writeback-csv-export/plan.md',
+  'diagrams/005-component.puml',
+  'diagrams/005-class.puml',
 );
 
 // ---------- TypeScript 原始碼解析 ----------
@@ -261,7 +272,18 @@ function describeDiagramSet(
       if (classBody) {
         // 服務類別：公開方法須與類別圖完全一致（private 方法不列入）
         const publicOnly = classBody.replace(/^ {2}(?:private|protected) [^\n]*$/gm, '');
-        expect(sorted(classPublicMethods(publicOnly))).toEqual(sorted(c.methods));
+        const publicMethods = classPublicMethods(publicOnly);
+        if (c.stereotype && /^\d{3}$/.test(c.stereotype)) {
+          // 引用既有功能（例如 <<003>>）的類別：只需包含圖上列出的方法
+          expect(publicMethods).toEqual(expect.arrayContaining(c.methods));
+        } else {
+          expect(sorted(publicMethods)).toEqual(sorted(c.methods));
+        }
+        for (const m of c.privateMethods) {
+          expect(classBody, `${file} 缺少私有方法 ${name}.${m}`).toMatch(
+            new RegExp(`^ {2}private (?:async )?${m}\\(`, 'm'),
+          );
+        }
         return;
       }
       // 實體（純型別）：方法以同名匯出函式實作，例如 isLocked(user, now)
@@ -327,16 +349,38 @@ describeDiagramSet('004', set004, 34, [
   'MonitorView',
 ]);
 
-describe('程式檔案 ↔ 設計圖對照表（001＋003＋004）', () => {
+describeDiagramSet('005', set005, 22, [
+  'WritebackTarget',
+  'AnswerSlotFallback',
+  'WritebackPreview',
+  'WritebackItem',
+  'WritebackOutcome',
+  'PreviewState',
+  'CsvResultRow',
+  'ExportEvent',
+  'ActivityResultReader',
+  'WritebackService',
+  'CsvExportService',
+  'CsvEncoder',
+  'WritebackRules',
+]);
+
+describe('程式檔案 ↔ 設計圖對照表（001＋003＋004＋005）', () => {
   it('routes／services／db／middleware／integrations 下沒有圖表與允許清單以外的檔案', () => {
     const mapped = new Set(
       [
         ...set001.componentMap.values(),
         ...set003.componentMap.values(),
         ...set004.componentMap.values(),
+        ...set005.componentMap.values(),
       ].flat(),
     );
-    const allowed = [...set001.allowPatterns, ...set003.allowPatterns, ...set004.allowPatterns];
+    const allowed = [
+      ...set001.allowPatterns,
+      ...set003.allowPatterns,
+      ...set004.allowPatterns,
+      ...set005.allowPatterns,
+    ];
     const extra: string[] = [];
     for (const dir of ['routes', 'services', 'db', 'middleware', 'integrations/google']) {
       const abs = path.join(ROOT, 'backend/src', dir);

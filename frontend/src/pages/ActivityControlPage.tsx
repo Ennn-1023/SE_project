@@ -4,6 +4,8 @@ import { api, ApiError } from '../api/apiClient';
 import { ActivityQuestionList } from '../activity/ActivityQuestionList';
 import { ActivityStartPanel } from '../activity/ActivityStartPanel';
 import { ActivitySummary } from '../activity/ActivitySummary';
+import { ExportCsvButton } from '../activity/ExportCsvButton';
+import { WritebackPreviewDialog } from '../activity/WritebackPreviewDialog';
 import { MonitorBoard } from '../activity/MonitorBoard';
 import { OpenQuestionForm } from '../activity/OpenQuestionForm';
 import { ResultBoard } from '../activity/ResultBoard';
@@ -14,6 +16,7 @@ import { ErrorMessage } from '../components/ErrorMessage';
 import { Layout } from '../components/Layout';
 
 export const OFFLINE_TEXT = '連線中斷，正在重新連線，請稍後再操作';
+export const NO_RESULTS_TEXT = '尚無搶答活動結果可寫回或匯出';
 
 function endConfirmText(view: TeacherActivityView): string {
   const notOpened = view.questions.filter((q) => q.status === 'NOT_OPENED').length;
@@ -35,6 +38,7 @@ export function ActivityControlPage({ socketFactory }: { socketFactory?: Teacher
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<ResultBoardView | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [writebackOpen, setWritebackOpen] = useState(false);
 
   const offline = connection === 'offline';
   const busy = pending !== null || offline;
@@ -109,6 +113,21 @@ export function ActivityControlPage({ socketFactory }: { socketFactory?: Teacher
             >
               結束活動
             </Button>
+          ) : null}
+        </div>
+
+        {/* 005：寫回與匯出入口（活動任何階段皆可使用，FR-002、FR-026） */}
+        <div className="flex flex-wrap items-start gap-2" aria-label="寫回與匯出">
+          <Button
+            variant="primary"
+            disabled={phase === 'NONE'}
+            onClick={() => setWritebackOpen(true)}
+          >
+            寫回 Google 試算表
+          </Button>
+          <ExportCsvButton disabled={phase === 'NONE'} />
+          {phase === 'NONE' ? (
+            <p className="self-center text-sm text-ink/70">{NO_RESULTS_TEXT}</p>
           ) : null}
         </div>
 
@@ -187,7 +206,11 @@ export function ActivityControlPage({ socketFactory }: { socketFactory?: Teacher
 
             {phase === 'ENDED' ? (
               <>
-                <ActivitySummary view={view} onViewResult={(id) => void viewResult(id)} />
+                <ActivitySummary
+                  view={view}
+                  onViewResult={(id) => void viewResult(id)}
+                  onWriteback={() => setWritebackOpen(true)}
+                />
                 {view.readiness ? (
                   <ActivityStartPanel
                     readiness={view.readiness}
@@ -216,6 +239,7 @@ export function ActivityControlPage({ socketFactory }: { socketFactory?: Teacher
         </div>
 
         {dialogError ? <ErrorMessage message={dialogError} /> : null}
+        {writebackOpen ? <WritebackPreviewDialog onClose={() => setWritebackOpen(false)} /> : null}
         {dialog ? (
           <div
             role="dialog"

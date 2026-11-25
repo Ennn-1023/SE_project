@@ -75,7 +75,11 @@ export class FakeGoogle implements GoogleOAuthClient, SheetsGateway {
   private readonly codes = new Map<string, { challenge: string; scope: string }>();
   private readonly accessTokens = new Set<string>();
   private readonly refreshTokens = new Set<string>();
-  private failures: { status: number; reason: string; method?: string }[] = [];
+  private failures: { status: number; reason: string; method?: string; message?: string }[] = [];
+  /** 受保護的格子（`${spreadsheetId}|${sheetTitle}|${A1}`），寫入時 Google 回 403（005 research R7）。 */
+  private readonly protectedCells = new Set<string>();
+  /** 每次 updateValues 寫入的內容（005 測試用：確認單一批次與寫入內容）。 */
+  readonly valueUpdates: CellUpdate[][] = [];
 
   /** 呼叫紀錄（方法名稱），測試用。 */
   readonly calls: string[] = [];
@@ -129,8 +133,13 @@ export class FakeGoogle implements GoogleOAuthClient, SheetsGateway {
   }
 
   /** 下一次（或指定方法的下一次）呼叫失敗。 */
-  failNext(status: number, reason = 'FAKE', method?: string) {
-    this.failures.push({ status, reason, method });
+  failNext(status: number, reason = 'FAKE', method?: string, message?: string) {
+    this.failures.push({ status, reason, method, message });
+  }
+
+  /** 將格子設為受保護範圍（005）：寫入其中任一格時整批被拒。 */
+  protect(id: string, title: string, refs: string[]) {
+    for (const ref of refs) this.protectedCells.add(`${id}|${title}|${ref}`);
   }
 
   /** 讓 refresh token 失效（模擬老師在 Google 端撤銷）。 */
@@ -175,6 +184,16 @@ export class FakeGoogle implements GoogleOAuthClient, SheetsGateway {
     const a = parseCellRef(start)!;
     const b = parseCellRef(end)!;
     this.sheetByTitle(id, title).merges.push({ r1: a.row, c1: a.col, r2: b.row, c2: b.col });
+  }
+
+  /** 分頁改名（sheetId 不變；005 Edge Case） */
+  renameSheet(id: string, title: string, newTitle: string) {
+    this.sheetByTitle(id, title).title = newTitle;
+  }
+
+  /** 隱藏列（1 起算；005 FR-006「此格目前被隱藏」） */
+  hideRows(id: string, title: string, rows: number[]) {
+    for (const r of rows) this.sheetByTitle(id, title).hiddenRows.add(r);
   }
 
   metadataOf(id: string, title: string): StoredMeta[] {
@@ -375,6 +394,16 @@ export class FakeGoogle implements GoogleOAuthClient, SheetsGateway {
     const book = await this.enter('updateValues', token, spreadsheetId);
     if (book.permission !== 'edit') throw new GoogleHttpError(403, 'PERMISSION_DENIED');
     const sheet = this.findSheet(book, sheetTitle);
+    // 與 Google 相同：任一格受保護時整批拒絕，不寫入任何格子
+    if (updates.some((u) => this.protectedCells.has(`${spreadsheetId}|${sheetTitle}|${u.cell}`))) {
+      throw new GoogleHttpError(
+        403,
+        'PERMISSION_DENIED',
+        undefined,
+        'You are trying to edit a protected cell or object. Please contact the spreadsheet owner to remove protection if you need to edit.',
+      );
+    }
+    this.valueUpdates.push(updates.map((u) => ({ ...u })));
     for (const u of updates) {
       const p = parseCellRef(u.cell)!;
       sheet.cells.set(rc(p.row, p.col), { text: u.value });
@@ -389,7 +418,7 @@ export class FakeGoogle implements GoogleOAuthClient, SheetsGateway {
     const idx = this.failures.findIndex((f) => !f.method || f.method === method);
     if (idx !== -1) {
       const [f] = this.failures.splice(idx, 1);
-      throw new GoogleHttpError(f!.status, f!.reason);
+      throw new GoogleHttpError(f!.status, f!.reason, undefined, f!.message ?? '');
     }
     this.checkToken(token);
     const book = this.spreadsheets.get(spreadsheetId);

@@ -22,10 +22,23 @@ export class GoogleHttpError extends Error {
     /** Google 的錯誤狀態（例如 PERMISSION_DENIED、invalid_grant）或 TIMEOUT／NETWORK */
     readonly reason: string,
     message = `Google HTTP ${status} ${reason}`,
+    /** Google 錯誤訊息原文（只用於判斷錯誤種類，不回傳前端、不寫入 log） */
+    readonly googleMessage = '',
   ) {
     super(message);
     this.name = 'GoogleHttpError';
   }
+}
+
+function googleMessageOf(body: unknown): string {
+  if (body && typeof body === 'object') {
+    const err = (body as { error?: unknown }).error;
+    if (err && typeof err === 'object') {
+      const message = (err as { message?: unknown }).message;
+      if (typeof message === 'string') return message;
+    }
+  }
+  return '';
 }
 
 function reasonOf(body: unknown): string {
@@ -69,7 +82,9 @@ export async function googleFetch(
       body = null;
     }
   }
-  if (!res.ok) throw new GoogleHttpError(res.status, reasonOf(body));
+  if (!res.ok) {
+    throw new GoogleHttpError(res.status, reasonOf(body), undefined, googleMessageOf(body));
+  }
   return body;
 }
 
@@ -79,6 +94,8 @@ export function mapGoogleError(err: unknown, phase: 'read' | 'write', logger?: L
   let code: ErrorCode = 'GOOGLE_UNAVAILABLE';
   if (err instanceof GoogleHttpError) {
     if (err.status === 401 || err.reason === 'invalid_grant') code = 'GOOGLE_AUTH_EXPIRED';
+    else if (err.status === 403 && phase === 'write' && /protected/i.test(err.googleMessage))
+      code = 'SHEET_PROTECTED_RANGE'; // 005 research R7：寫入受保護範圍
     else if (err.status === 403)
       code = phase === 'write' ? 'SHEET_NO_EDIT_PERMISSION' : 'SHEET_FORBIDDEN';
     else if (err.status === 404) code = 'SHEET_NOT_FOUND';

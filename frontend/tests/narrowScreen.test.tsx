@@ -171,3 +171,70 @@ describe('活動頁版面（004 SC-009、FR-033）', () => {
     expect(screen.getAllByRole('button', { name: '展開完整答案' }).length).toBeGreaterThan(0);
   });
 });
+
+describe('寫回與匯出在 375px 的版面（005 SC-010）', () => {
+  it('寫回預覽對話框：手機全螢幕、只垂直捲動、長內容折行、按鈕觸控區至少 44px', async () => {
+    const { WritebackPreviewDialog } = await import('../src/activity/WritebackPreviewDialog');
+    vi.spyOn(api, 'writebackPreview').mockResolvedValue({
+      previewId: 'AbCdEfGhIjKl',
+      expiresAt: new Date().toISOString(),
+      target: { spreadsheetTitle: '很長的試算表名稱'.repeat(10), sheetTitle: '學習單', url: 'https://x' },
+      items: [
+        {
+          key: 'qs01:0',
+          questionNumber: '1',
+          partLabel: null,
+          cell: 'G5',
+          fallbackCell: 'G5',
+          hidden: false,
+          winnerTeamName: '第 1 組',
+          answer: 'A'.repeat(500),
+          currentContent: '老師筆記',
+          status: 'OVERWRITE',
+        },
+      ],
+      skipped: [],
+      summary: { emptyCount: 0, overwriteCount: 1, sameCount: 0, unresolvedCount: 0, skippedQuestionCount: 0 },
+    });
+    renderAt('/teacher/activity', <WritebackPreviewDialog onClose={() => undefined} />);
+    const answer = await screen.findByText('A'.repeat(500));
+    expect(answer.className).toContain('break-words');
+    const dialog = screen.getByRole('dialog');
+    const panel = dialog.firstElementChild as HTMLElement;
+    expect(dialog.className).toContain('inset-0');
+    expect(panel.className).toMatch(/(^| )w-full( |$)/);
+    expect(panel.className).toMatch(/(^| )h-full( |$)/);
+    expect(panel.className).toContain('min-w-0');
+    const scroller = answer.closest('.overflow-y-auto') as HTMLElement;
+    expect(scroller.className).toContain('overflow-x-hidden');
+    for (const b of within(dialog).getAllByRole('button')) expect(b.className).toContain('min-h-11');
+    for (const r of within(dialog).getAllByRole('radio')) {
+      expect(r.closest('label')!.className).toContain('min-h-11');
+    }
+  });
+
+  it('寫回結果與匯出按鈕的觸控區至少 44px', async () => {
+    const { WritebackResultPanel } = await import('../src/activity/WritebackResultPanel');
+    const { ExportCsvButton } = await import('../src/activity/ExportCsvButton');
+    renderAt(
+      '/teacher/activity',
+      <>
+        <WritebackResultPanel
+          outcome={{
+            writtenCells: 1,
+            writtenQuestions: 1,
+            overwrittenCells: 0,
+            skippedCells: 0,
+            skippedReasons: [],
+            spreadsheetUrl: 'https://x',
+          }}
+          onClose={() => undefined}
+        />
+        <ExportCsvButton />
+      </>,
+    );
+    expect(screen.getByRole('link', { name: '開啟試算表' }).className).toContain('min-h-11');
+    expect(screen.getByRole('button', { name: '關閉' }).className).toContain('min-h-11');
+    expect(screen.getByRole('button', { name: '匯出結果 CSV' }).className).toContain('min-h-11');
+  });
+});

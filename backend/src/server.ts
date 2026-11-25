@@ -14,6 +14,9 @@ import { createLogger } from './lib/logger.js';
 import { ActivityService } from './services/activityService.js';
 import { MonitorViewBuilder } from './services/monitorViewBuilder.js';
 import { createRealtime } from './realtime/socketServer.js';
+import { ActivityResultReader } from './services/activityResultReader.js';
+import { CsvExportService } from './services/csvExportService.js';
+import { WritebackService } from './services/writebackService.js';
 
 export interface RunningServer {
   url: string;
@@ -113,7 +116,35 @@ export async function startServer(
     teacherView: () => monitor.build(),
   });
   monitor.online = () => realtime.onlineStudents();
-  const ctx: AppContext = { config, repo, machine, submissions, viewFor, realtime, activities };
+  // 005：寫回與 CSV 共用同一份有效結果讀取（research R9）
+  const reader = new ActivityResultReader(repo);
+  const { clock, logger } = container;
+  const writeback = new WritebackService({
+    reader,
+    targets: container.repos.writebackTargets,
+    sheets: container.services.sheets,
+    codec: container.codec,
+    events: container.repos.exportEvents,
+    clock,
+    logger,
+  });
+  const csvExport = new CsvExportService({
+    reader,
+    events: container.repos.exportEvents,
+    clock,
+    logger,
+  });
+  const ctx: AppContext = {
+    config,
+    repo,
+    machine,
+    submissions,
+    viewFor,
+    realtime,
+    activities,
+    writeback,
+    csvExport,
+  };
   machine.hooks.onChange = () => {
     realtime.pushAll();
     realtime.pushTeachers();

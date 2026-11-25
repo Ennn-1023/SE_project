@@ -324,6 +324,53 @@ const MIGRATIONS: { version: number; up: (db: Database, now: string) => void }[]
       ).run(nowMs, nowMs);
     },
   },
+  {
+    // 005 答案寫回與結果匯出（specs/005-sheets-writeback-csv-export/data-model.md §1）
+    version: 5,
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE activities ADD COLUMN spreadsheet_id TEXT
+          CHECK (spreadsheet_id IS NULL OR length(spreadsheet_id) BETWEEN 20 AND 100);
+        ALTER TABLE activities ADD COLUMN spreadsheet_title TEXT
+          CHECK (spreadsheet_title IS NULL OR length(spreadsheet_title) BETWEEN 1 AND 200);
+        ALTER TABLE activities ADD COLUMN sheet_id INTEGER
+          CHECK (sheet_id IS NULL OR sheet_id >= 0);
+        ALTER TABLE activities ADD COLUMN sheet_title TEXT
+          CHECK (sheet_title IS NULL OR length(sheet_title) BETWEEN 1 AND 200);
+        ALTER TABLE activities ADD COLUMN source_url TEXT
+          CHECK (
+            (source_url IS NULL OR length(source_url) >= 1)
+            AND (source_url IS NULL) = (spreadsheet_id IS NULL)
+            AND (source_url IS NULL) = (spreadsheet_title IS NULL)
+            AND (source_url IS NULL) = (sheet_id IS NULL)
+            AND (source_url IS NULL) = (sheet_title IS NULL)
+          );
+
+        ALTER TABLE question_parts ADD COLUMN answer_cell TEXT
+          CHECK (answer_cell IS NULL OR (
+            length(answer_cell) BETWEEN 2 AND 10
+            AND answer_cell GLOB '[A-Z]*[1-9]*'
+            AND answer_cell NOT GLOB '*[^A-Z0-9]*'
+            AND answer_cell NOT GLOB '*[0-9]*[A-Z]*'
+          ));
+
+        CREATE TABLE export_events (
+          id             INTEGER PRIMARY KEY AUTOINCREMENT,
+          at             TEXT NOT NULL,
+          actor_id       INTEGER NOT NULL REFERENCES users(id),
+          activity_id    TEXT NOT NULL,
+          type           TEXT NOT NULL CHECK (type IN ('WRITEBACK_SUCCEEDED','WRITEBACK_FAILED','CSV_EXPORTED')),
+          spreadsheet_id TEXT,
+          written        INTEGER NOT NULL DEFAULT 0 CHECK (written >= 0),
+          overwritten    INTEGER NOT NULL DEFAULT 0 CHECK (overwritten >= 0),
+          skipped        INTEGER NOT NULL DEFAULT 0 CHECK (skipped >= 0),
+          rows           INTEGER NOT NULL DEFAULT 0 CHECK (rows >= 0),
+          failure_code   TEXT CHECK (failure_code IS NULL OR type = 'WRITEBACK_FAILED')
+        );
+        CREATE INDEX idx_export_events_activity ON export_events(activity_id, id);
+      `);
+    },
+  },
 ];
 
 /** 套用尚未執行的 migration；`upTo` 供測試模擬舊版本資料庫（預設全部）。 */

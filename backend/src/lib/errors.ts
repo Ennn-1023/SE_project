@@ -31,6 +31,16 @@ export const ErrorCodes = {
   DRAFT_EXPIRED: 'DRAFT_EXPIRED',
   DRAFT_REVISION_CONFLICT: 'DRAFT_REVISION_CONFLICT',
   SHEET_NOT_NATIVE: 'SHEET_NOT_NATIVE',
+  // 005 答案寫回與結果匯出（specs/005-sheets-writeback-csv-export/research.md R12）
+  NO_ACTIVITY_RESULTS: 'NO_ACTIVITY_RESULTS',
+  WRITEBACK_NO_SOURCE: 'WRITEBACK_NO_SOURCE',
+  WRITEBACK_NOTHING_TO_WRITE: 'WRITEBACK_NOTHING_TO_WRITE',
+  WRITEBACK_NOT_THIS_SHEET: 'WRITEBACK_NOT_THIS_SHEET',
+  WRITEBACK_PREVIEW_EXPIRED: 'WRITEBACK_PREVIEW_EXPIRED',
+  WRITEBACK_STALE: 'WRITEBACK_STALE',
+  WRITEBACK_IN_PROGRESS: 'WRITEBACK_IN_PROGRESS',
+  WRITEBACK_OVERWRITE_REQUIRED: 'WRITEBACK_OVERWRITE_REQUIRED',
+  SHEET_PROTECTED_RANGE: 'SHEET_PROTECTED_RANGE',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
@@ -66,6 +76,15 @@ export const STATUS_BY_CODE: Record<ErrorCode, number> = {
   DRAFT_EXPIRED: 410,
   DRAFT_REVISION_CONFLICT: 409,
   SHEET_NOT_NATIVE: 422,
+  NO_ACTIVITY_RESULTS: 404,
+  WRITEBACK_NO_SOURCE: 409,
+  WRITEBACK_NOTHING_TO_WRITE: 409,
+  WRITEBACK_NOT_THIS_SHEET: 409,
+  WRITEBACK_PREVIEW_EXPIRED: 410,
+  WRITEBACK_STALE: 409,
+  WRITEBACK_IN_PROGRESS: 409,
+  WRITEBACK_OVERWRITE_REQUIRED: 400,
+  SHEET_PROTECTED_RANGE: 403,
 };
 
 /** 003 錯誤碼的固定訊息與修正提示（plan.md「錯誤情境與訊息」表）。 */
@@ -113,6 +132,34 @@ export const ERROR_TEXT: Partial<Record<ErrorCode, { message: string; hint: stri
   DRAFT_REVISION_CONFLICT: {
     message: '此學習單已在其他視窗修改',
     hint: '請重新載入以取得最新的標註',
+  },
+  // 005（research.md R12）
+  NO_ACTIVITY_RESULTS: {
+    message: '尚無搶答活動結果可寫回或匯出',
+    hint: '請先開始活動並完成至少一題',
+  },
+  WRITEBACK_NO_SOURCE: {
+    message: '本場活動沒有記錄來源試算表，無法寫回',
+    hint: '寫回功能上線前開始的活動，或不是從 Google 試算表匯入題目的活動，都無法寫回；可改用「匯出結果 CSV」保存結果',
+  },
+  WRITEBACK_NOTHING_TO_WRITE: {
+    message: '本場活動沒有搶答成功的答案可寫回',
+    hint: '可先匯出 CSV 保存結果',
+  },
+  WRITEBACK_NOT_THIS_SHEET: {
+    message: '這份學習單上找不到本場活動的作答格標註',
+    hint: '請確認是否為本場活動使用的學習單',
+  },
+  WRITEBACK_PREVIEW_EXPIRED: { message: '預覽已失效', hint: '請重新預覽' },
+  WRITEBACK_STALE: { message: '學習單在預覽後有變動', hint: '請重新預覽' },
+  WRITEBACK_IN_PROGRESS: { message: '寫回進行中，請稍候', hint: '完成後會顯示寫回結果' },
+  WRITEBACK_OVERWRITE_REQUIRED: {
+    message: '有作答格已有內容，請選擇「全部覆蓋」或「略過已有內容的格子」',
+    hint: '選擇覆蓋選項後再按「確認寫回」',
+  },
+  SHEET_PROTECTED_RANGE: {
+    message: '作答格位於受保護範圍，無法寫入',
+    hint: '請試算表擁有者解除保護，或將你加入可編輯名單',
   },
 };
 

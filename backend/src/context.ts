@@ -4,6 +4,8 @@ import type { Repository } from './data/repositories';
 import type { ActivityStateMachine } from './domain/activityStateMachine';
 import type { SubmissionService } from './domain/submissionService';
 import type { ActivityService } from './services/activityService';
+import type { CsvExportService } from './services/csvExportService';
+import type { WritebackService } from './services/writebackService';
 
 /** 推播介面（realtime/socketServer.ts） */
 export interface Realtime {
@@ -28,4 +30,8 @@ export interface AppContext {
   realtime: Realtime;
   /** 老師活動控制（004） */
   activities: ActivityService;
+  /** 答案寫回 Google 試算表（005） */
+  writeback: WritebackService;
+  /** 活動結果匯出 CSV（005） */
+  csvExport: CsvExportService;
 }

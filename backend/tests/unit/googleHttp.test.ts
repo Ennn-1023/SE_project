@@ -111,6 +111,48 @@ describe('mapGoogleError（research R2 表格）', () => {
     expect(err.hint).toContain('儲存為 Google 試算表');
   });
 
+  describe('受保護範圍（005 research R7、T045）', () => {
+    const PROTECTED = `You are trying to edit a protected cell or object. ${TOKEN}`;
+
+    it('寫入階段 403 且 Google 訊息含 protected → 403 SHEET_PROTECTED_RANGE，不含原文', () => {
+      const err = mapGoogleError(
+        new GoogleHttpError(403, 'PERMISSION_DENIED', undefined, PROTECTED),
+        'write',
+      );
+      expect(err.code).toBe('SHEET_PROTECTED_RANGE');
+      expect(err.status).toBe(403);
+      expect(err.message).toBe('作答格位於受保護範圍，無法寫入');
+      expect(err.hint).toContain('解除保護');
+      expect(JSON.stringify(err.toBody())).not.toContain(TOKEN);
+      expect(JSON.stringify(err.toBody())).not.toContain('protected cell');
+    });
+
+    it('寫入階段 403 但訊息不含 protected → 維持 SHEET_NO_EDIT_PERMISSION（邊界）', () => {
+      const err = mapGoogleError(
+        new GoogleHttpError(403, 'PERMISSION_DENIED', undefined, 'no access'),
+        'write',
+      );
+      expect(err.code).toBe('SHEET_NO_EDIT_PERMISSION');
+    });
+
+    it('讀取階段不受影響', () => {
+      const err = mapGoogleError(
+        new GoogleHttpError(403, 'PERMISSION_DENIED', undefined, PROTECTED),
+        'read',
+      );
+      expect(err.code).toBe('SHEET_FORBIDDEN');
+    });
+
+    it('googleFetch 保留 Google 訊息供判斷', async () => {
+      const fetchImpl = vi.fn(async () =>
+        jsonResponse(403, { error: { status: 'PERMISSION_DENIED', message: PROTECTED } }),
+      );
+      const err = await rejection(googleFetch('https://x/y', {}, { fetch: fetchImpl }));
+      expect(err.googleMessage).toBe(PROTECTED);
+      expect(err.message).not.toContain(TOKEN);
+    });
+  });
+
   it('已是 AppError 時原樣回傳', () => {
     const original = new AppError('SHEET_EMPTY', '這個分頁是空的');
     expect(mapGoogleError(original, 'read')).toBe(original);

@@ -4,6 +4,7 @@ import { transaction } from './db';
 import type {
   Activity,
   ActivityQuestion,
+  ActivitySource,
   ClosedReason,
   ParticipatingTeam,
   QuestionPart,
@@ -29,7 +30,20 @@ const toActivity = (r: Row): Activity => ({
   endedAt: num(r.ended_at),
   sourceTitle: str(r.source_title),
   notice: str(r.notice),
+  source: toSource(r),
 });
+
+/** 005 data-model.md §1.1：五個來源欄位同時為 NULL 或同時有值 */
+function toSource(r: Row): ActivitySource | null {
+  if (r.spreadsheet_id == null || r.source_url == null) return null;
+  return {
+    spreadsheetId: String(r.spreadsheet_id),
+    spreadsheetTitle: String(r.spreadsheet_title),
+    sheetId: Number(r.sheet_id),
+    sheetTitle: String(r.sheet_title),
+    sourceUrl: String(r.source_url),
+  };
+}
 
 const toQuestion = (r: Row): ActivityQuestion => ({
   questionId: String(r.question_id),
@@ -103,7 +117,8 @@ export interface NewActivityQuestion {
   questionKey: string | null;
   kind: ActivityQuestion['kind'];
   stem: string | null;
-  parts: QuestionPart[];
+  /** answerCell：匯入當下的作答格位置（005 data-model.md §1.2 question_parts.answer_cell） */
+  parts: (QuestionPart & { answerCell?: string | null })[];
 }
 
 /**
@@ -124,6 +139,16 @@ export class Repository {
       (this.db
         .prepare(`SELECT * FROM activities ORDER BY updated_at DESC, rowid DESC LIMIT 1`)
         .get() as Row | undefined);
+    return row ? toActivity(row) : null;
+  }
+
+  /** 最近一場「真正開始過」的活動（005 FR-001）：排除 started_at 為 NULL 的 002 mock 活動 */
+  getLatestStartedActivity(): Activity | null {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM activities WHERE started_at IS NOT NULL ORDER BY started_at DESC, rowid DESC LIMIT 1`,
+      )
+      .get() as Row | undefined;
     return row ? toActivity(row) : null;
   }
 
@@ -168,16 +193,34 @@ export class Repository {
   createActivity(activity: Activity, questions: NewActivityQuestion[]): void {
     transaction(this.db, () => {
       this.saveActivity(activity);
+      // 寫回目標只在建立時寫入（005 FR-005），之後的 saveActivity 不會改動
+      const src = activity.source ?? null;
+      this.db
+        .prepare(
+          `UPDATE activities SET spreadsheet_id = ?, spreadsheet_title = ?, sheet_id = ?, sheet_title = ?,
+             source_url = ? WHERE id = ?`,
+        )
+        .run(
+          src?.spreadsheetId ?? null,
+          src?.spreadsheetTitle ?? null,
+          src?.sheetId ?? null,
+          src?.sheetTitle ?? null,
+          src?.sourceUrl ?? null,
+          activity.id,
+        );
       const insQ = this.db.prepare(
         `INSERT INTO questions (question_id, activity_id, number, text, label, kind, stem, question_key)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       const insP = this.db.prepare(
-        `INSERT INTO question_parts (question_id, part_index, part_label, question_text) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO question_parts (question_id, part_index, part_label, question_text, answer_cell)
+         VALUES (?, ?, ?, ?, ?)`,
       );
       for (const q of questions) {
         insQ.run(q.questionId, activity.id, q.position, q.text, q.label, q.kind, q.stem, q.questionKey);
-        for (const p of q.parts) insP.run(q.questionId, p.partIndex, p.partLabel, p.questionText);
+        for (const p of q.parts) {
+          insP.run(q.questionId, p.partIndex, p.partLabel, p.questionText, p.answerCell ?? null);
+        }
       }
     });
   }
@@ -209,6 +252,14 @@ export class Repository {
       partLabel: str(r.part_label),
       questionText: String(r.question_text),
     }));
+  }
+
+  /** 各小題匯入當下的作答格位置（005 data-model.md §1.2 question_parts.answer_cell） */
+  getAnswerCells(questionId: string): Map<number, string | null> {
+    const rows = this.db
+      .prepare(`SELECT part_index, answer_cell FROM question_parts WHERE question_id = ?`)
+      .all(questionId) as Row[];
+    return new Map(rows.map((r) => [Number(r.part_index), str(r.answer_cell)]));
   }
 
   /** 更新題目的開放／結束狀態（data-model.md §1.2） */

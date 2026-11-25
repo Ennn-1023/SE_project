@@ -42,7 +42,7 @@ package "後端（伺服器）" as BE {
     [ExportEventRepository\n(寫回／匯出紀錄，不含答案)] as EventRepo
   }
   package "外部整合（003）" {
-    [GoogleSheetsGateway] as Gateway
+    [SheetsGateway] as Gateway
   }
   [Logger\n(不記錄答案與 token)] as Logger
 }

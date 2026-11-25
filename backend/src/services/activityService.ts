@@ -101,6 +101,8 @@ export class ActivityService {
         partIndex: s.partIndex,
         partLabel: s.partLabel,
         questionText: s.questionText,
+        // 005 FR-005：匯入當下的作答格位置（找不到標註時的後備位置）
+        answerCell: s.answerCell,
       })),
     }));
     const activity: Activity = {
@@ -114,6 +116,8 @@ export class ActivityService {
       endedAt: null,
       sourceTitle: `${record.set.source.spreadsheetTitle}／${record.set.source.sheetTitle}`,
       notice: null,
+      // 005 FR-005：寫回目標隨題目快照記錄，之後重新匯入題目集不影響本場
+      source: { ...record.set.source },
     };
     repo.createActivity(activity, questions);
     machine.start(activity);
