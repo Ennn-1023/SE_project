@@ -4,10 +4,11 @@
   box-sizing: border-box;
 }
 
+/* 用 clip 而非 hidden：hidden 會讓 body 變成不會捲動的捲動容器，使作答頁倒數列的 sticky 失效（007） */
 html,
 body {
   margin: 0;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
@@ -227,12 +228,26 @@ h3 {
   gap: var(--space-4);
 }
 
+/* 007 FR-012：題號＋倒數列在捲動時固定在畫面頂端；負邊距＋同量 padding 讓背景蓋滿卡片內距 */
 .answering-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
   flex-wrap: wrap;
+  position: sticky;
+  top: var(--answering-sticky-top, 0);
+  z-index: 5;
+  background: var(--color-surface);
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* 聚焦作答欄位時，瀏覽器會把欄位捲到倒數列下方，不會被蓋住 */
+.answering textarea,
+.answering input {
+  scroll-margin-top: calc(var(--answering-sticky-top, 0px) + var(--answering-head-h));
 }
 
 .question-text {
@@ -445,9 +460,19 @@ h3 {
   position: sticky;
   top: 0;
   z-index: 10;
+  min-height: var(--connection-banner-h);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: var(--space-2) var(--space-4);
   background: var(--color-accent);
   color: var(--color-on-accent);
   font-weight: 700;
   text-align: center;
+}
+
+/* 007 research R6：斷線提示列出現時，作答頁倒數列改停在提示列正下方 */
+.connection-banner ~ .page {
+  --answering-sticky-top: var(--connection-banner-h);
 }

@@ -173,3 +173,68 @@ describe('題目管理頁的 RWD（003 FR-034、SC-010）', () => {
     expect(within(panel).getByRole('button', { name: '收合' })).toBeInTheDocument();
   });
 });
+
+/** 取得 CSS 原始碼中某個選擇器（完全相同）的宣告區塊 */
+function cssRule(css: string, selector: string): string {
+  const normalized = css.replace(/\r\n/g, '\n');
+  const start = normalized.indexOf(`\n${selector} {`);
+  if (start === -1) throw new Error(`找不到 CSS 規則：${selector}`);
+  const open = normalized.indexOf('{', start);
+  return normalized.slice(open + 1, normalized.indexOf('}', open));
+}
+
+const zIndex = (rule: string) => Number(rule.match(/z-index:\s*(\d+)/)?.[1]);
+
+describe('007 作答頁倒數列：捲動時固定在頂端（FR-012、contracts/ui-countdown §3）', () => {
+  const css = fs.readFileSync(path.join(SRC, 'styles/global.css'), 'utf8');
+
+  it('.answering-head 為 sticky，有不透明背景，z-index 低於斷線提示列', () => {
+    const head = cssRule(css, '.answering-head');
+    expect(head).toMatch(/position:\s*sticky/);
+    expect(head).toMatch(/top:\s*var\(--answering-sticky-top,\s*0\)/);
+    expect(head).toMatch(/background:\s*var\(--color-surface\)/);
+    const banner = cssRule(css, '.connection-banner');
+    expect(zIndex(head)).toBeLessThan(zIndex(banner));
+  });
+
+  it('斷線提示列有固定高度，出現時倒數列改停在它下方', () => {
+    expect(cssRule(css, '.connection-banner')).toMatch(
+      /min-height:\s*var\(--connection-banner-h\)/,
+    );
+    expect(cssRule(css, '.connection-banner ~ .page')).toMatch(
+      /--answering-sticky-top:\s*var\(--connection-banner-h\)/,
+    );
+  });
+
+  it('html／body 不用 overflow-x: hidden（會讓 body 變成捲動容器、sticky 失效），改用 clip', () => {
+    const theme = fs.readFileSync(path.join(SRC, 'styles/theme.css'), 'utf8');
+    for (const src of [css, theme]) expect(src).not.toMatch(/overflow-x:\s*hidden/);
+    expect(cssRule(css, 'html,\nbody')).toMatch(/overflow-x:\s*clip/);
+    expect(theme).toMatch(/\nbody\s*\{[^}]*min-width:\s*320px;[^}]*overflow-x:\s*clip/);
+  });
+
+  it('作答欄位有 scroll-margin-top，聚焦時不會被倒數列蓋住', () => {
+    const rule = cssRule(css, '.answering textarea,\n.answering input');
+    expect(rule).toMatch(/scroll-margin-top:[^;]*var\(--answering-head-h\)/);
+  });
+});
+
+describe('007 倒數顏色與老師端相同（FR-005～FR-007、contracts/ui-countdown §3）', () => {
+  const css = fs.readFileSync(path.join(SRC, 'styles/global.css'), 'utf8');
+  const tokens = fs.readFileSync(path.join(SRC, 'styles/tokens.css'), 'utf8');
+  const theme = fs.readFileSync(path.join(SRC, 'styles/theme.css'), 'utf8');
+
+  it('平常為深藍（主色），最後十秒為橘（強調色）', () => {
+    expect(cssRule(css, '.countdown-value')).toMatch(/color:\s*var\(--color-primary\)/);
+    expect(cssRule(css, '.countdown-urgent .countdown-value')).toMatch(
+      /color:\s*var\(--color-accent\)/,
+    );
+  });
+
+  it('不另訂新色：tokens.css 與 theme.css 的主色、強調色同值', () => {
+    for (const src of [tokens, theme]) {
+      expect(src).toMatch(/--color-primary:\s*#1f3a93;/);
+      expect(src).toMatch(/--color-accent:\s*#ff6b4a;/);
+    }
+  });
+});

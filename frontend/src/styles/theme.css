@@ -26,7 +26,8 @@ body {
 body {
   margin: 0;
   min-width: 320px;
-  overflow-x: hidden;
+  /* clip：防止橫向捲動，但不建立捲動容器，sticky 才會以視窗為準（007） */
+  overflow-x: clip;
   font-family:
     system-ui,
     -apple-system,

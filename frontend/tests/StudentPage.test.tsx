@@ -95,3 +95,19 @@ describe('StudentPage 登入失效', () => {
     expect(screen.getByText('等待老師開放題目')).toBeInTheDocument();
   });
 });
+
+describe('StudentPage 斷線提示列與倒數列堆疊（007 research R6）', () => {
+  it('斷線時提示列是 main.page 之前的兄弟元素，倒數列才能停在提示列下方', async () => {
+    vi.stubGlobal('fetch', routeFetch({ 'GET /api/student/state': () => json(answeringView()) }));
+    const sock = renderPage();
+    sock.connection('online');
+    expect(await screen.findByLabelText('你的答案')).toBeInTheDocument();
+    sock.connection('offline');
+    const banner = screen.getByRole('alert');
+    expect(banner).toHaveClass('connection-banner');
+    const main = screen.getByRole('main');
+    expect(main).toHaveClass('page');
+    expect(banner.nextElementSibling).toBe(main);
+    expect(main.querySelector('.answering-head')).not.toBeNull();
+  });
+});
