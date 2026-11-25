@@ -57,7 +57,7 @@ export function ActivityStartPanel({
       ) : null}
       {noTeams ? (
         <ErrorMessage message="尚無任何組別有學生" hint="請先到組別管理分組">
-          <Link to="/teacher" className="text-primary underline">
+          <Link to="/teacher/students" className="text-primary underline">
             前往組別管理
           </Link>
         </ErrorMessage>

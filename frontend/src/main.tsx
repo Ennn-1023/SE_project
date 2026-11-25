@@ -8,12 +8,11 @@ import { ErrorMessage } from './components/ErrorMessage';
 import { Layout } from './components/Layout';
 import { ActivityControlPage } from './pages/ActivityControlPage';
 import { ChangePasswordForm } from './pages/ChangePasswordForm';
-import { DevTeacherPanel } from './pages/DevTeacherPanel';
 import { homePathFor, LoginPage } from './pages/LoginPage';
 import { QuestionManagePage } from './pages/QuestionManagePage';
 import { StudentHome } from './pages/StudentHome';
 import { StudentPage } from './pages/StudentPage';
-import { TeacherDashboard } from './pages/TeacherDashboard';
+import { StudentManagePage } from './pages/StudentManagePage';
 import './styles/theme.css';
 
 const FORBIDDEN_TEXT: Record<Role, string> = {
@@ -83,23 +82,26 @@ export function AppRoutes() {
         path="/teacher"
         element={
           <Guard role="TEACHER">
-            <TeacherDashboard />
-          </Guard>
-        }
-      />
-      <Route
-        path="/teacher/activity"
-        element={
-          <Guard role="TEACHER">
             <ActivityControlPage />
           </Guard>
         }
       />
+      {/* 006 research R2：舊網址導回老師主頁（搶答活動） */}
+      <Route path="/teacher/activity" element={<Navigate to="/teacher" replace />} />
+
       <Route
         path="/teacher/questions"
         element={
           <Guard role="TEACHER">
             <QuestionManagePage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/teacher/students"
+        element={
+          <Guard role="TEACHER">
+            <StudentManagePage />
           </Guard>
         }
       />
@@ -119,18 +121,6 @@ export function AppRoutes() {
           </Guard>
         }
       />
-      {import.meta.env.DEV && (
-        <Route
-          path="/dev"
-          element={
-            <Guard role="TEACHER">
-              <Layout title="模擬老師搶答操作（開發工具）">
-                <DevTeacherPanel />
-              </Layout>
-            </Guard>
-          }
-        />
-      )}
       <Route
         path="/account/password"
         element={

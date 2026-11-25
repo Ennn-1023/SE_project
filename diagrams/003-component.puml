@@ -8,7 +8,7 @@ skinparam shadowing false
 actor "老師" as Teacher
 
 package "前端（瀏覽器，RWD）" as FE {
-  [老師管理頁\nTeacherDashboard] as TeacherPage
+  [學生管理頁\nStudentManagePage\n(006 由 TeacherDashboard 改名)] as TeacherPage
   [題目管理頁\nQuestionManagePage] as QPage
   [Google 連結狀態\nGoogleConnectionPanel] as GPanel
   [學習單連結表單\nSheetLinkForm] as LinkForm
@@ -61,7 +61,7 @@ cloud "Google Sheets API v4" as GoogleSheets
 file ".env\n(GOOGLE_CLIENT_ID,\nGOOGLE_CLIENT_SECRET,\nGOOGLE_TOKEN_ENCRYPTION_KEY ...)" as EnvFile
 
 Teacher --> TeacherPage
-TeacherPage --> QPage : 題目管理按鈕
+TeacherPage --> QPage : 側邊選單（006）
 Teacher --> GoogleOAuth : 同意授權
 QPage --> GPanel
 QPage --> LinkForm

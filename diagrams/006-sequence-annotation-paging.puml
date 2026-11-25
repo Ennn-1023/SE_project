@@ -1,0 +1,53 @@
+@startuml 006-sequence-annotation-paging
+title 006 時序圖：題目標註逐題切換
+skinparam backgroundColor #FAF7F0
+skinparam sequence {
+  ParticipantBackgroundColor #F5F0E6
+  ParticipantBorderColor #1F3A93
+  ArrowColor #1F3A93
+  LifeLineBorderColor #1F3A93
+}
+autonumber
+
+actor "老師" as T
+participant "AnnotationPanel\n+ QuestionPager / QuestionOverview" as P
+participant "useAnnotationEditor" as E
+participant "useAnnotationDraft\n(003，不變)" as D
+participant "SheetGrid" as G
+
+T -> P : 按「新增題目」
+P -> E : addQuestion()
+E -> D : onChange(questions + 新題目)
+E -> E : currentKey = 新題目；target = 題目格步驟
+E --> P : 只顯示新題目（第 N 題／共 N 題）
+P -> G : marksFor(doc, currentKey)（目前這一題角標醒目）
+
+T -> P : 按「上一題」
+P -> E : goPrev()
+alt 有進行中的指定步驟
+  E -> E : cancelStep()
+end
+E -> E : currentKey = 前一題
+E --> P : 顯示前一題（第 N-1 題／共 N 題）
+
+T -> G : 點選屬於第 4 題的格子（無進行中步驟）
+G -> E : handleCellClick(ref)
+E --> P : 選取格資訊「第 4 題的作答格」＋「前往第 4 題」
+T -> P : 按「前往第 4 題」
+P -> E : goTo(第 4 題 key)
+
+T -> P : 按「刪除」
+P -> E : removeQuestion(currentKey)
+E -> D : onChange(移除後的題目)
+alt 還有後一題
+  E -> E : currentKey = 原本的後一題
+else 刪除的是最後一題且仍有題目
+  E -> E : currentKey = 新的最後一題
+else 已無題目
+  E -> E : currentKey = null（顯示空狀態）
+end
+
+T -> P : 在題目總覽點選有錯誤標示的題號
+P -> E : goTo(key)
+E --> P : 顯示該題及其錯誤訊息
+@enduml

@@ -1,0 +1,38 @@
+@startuml 006-sequence-navigation
+title 006 時序圖：老師登入後落地與側邊選單切換
+skinparam backgroundColor #FAF7F0
+skinparam sequence {
+  ParticipantBackgroundColor #F5F0E6
+  ParticipantBorderColor #1F3A93
+  ArrowColor #1F3A93
+  LifeLineBorderColor #1F3A93
+}
+autonumber
+
+actor "老師" as T
+participant "LoginPage" as LP
+participant "AppRoutes + Guard" as R
+participant "TeacherLayout" as L
+participant "SideMenu" as M
+participant "ActivityControlPage" as A
+participant "StudentManagePage" as S
+
+T -> LP : 以老師帳號登入
+LP -> R : navigate(homePathFor(TEACHER) = /teacher)
+R -> R : Guard(role=TEACHER)
+R -> A : 顯示搶答活動（/teacher 即搶答活動）
+A -> L : 以 TeacherLayout 包住內容
+T -> L : 按左上角三條線按鈕
+L -> M : open = true
+M --> T : 左側選單：搶答活動（目前）、題目管理、學生管理
+alt 點選「學生管理」
+  T -> M : 點選
+  M -> R : navigate(/teacher/students)
+  M -> L : onClose()
+  R -> R : Guard(role=TEACHER)
+  R -> S : 顯示學生帳號建立、學生清單與組別管理
+else 點選選單外、再按按鈕或按 Esc
+  T -> M : 關閉
+  M -> L : onClose()（停留原畫面，焦點回到選單按鈕）
+end
+@enduml

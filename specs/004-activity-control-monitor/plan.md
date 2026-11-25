@@ -153,7 +153,7 @@ frontend/tests/                        # 上述新元件與變更元件、narrow
 
 | 組件 | 檔案 | 組件 | 檔案 |
 |------|------|------|------|
-| TeacherDashboard | `frontend/src/pages/TeacherDashboard.tsx` | ActivityRoutes | `backend/src/routes/activityRoutes.ts` |
+| StudentManagePage | `frontend/src/pages/StudentManagePage.tsx`（006 由 TeacherDashboard 改名） | ActivityRoutes | `backend/src/routes/activityRoutes.ts` |
 | ActivityControlPage | `frontend/src/pages/ActivityControlPage.tsx` | StudentRoutes | `backend/src/http/routes/student.ts` |
 | ActivityStartPanel | `frontend/src/activity/ActivityStartPanel.tsx` | QuestionSetRoutes | `backend/src/routes/questionSetRoutes.ts` |
 | ActivityQuestionList | `frontend/src/activity/ActivityQuestionList.tsx` | GroupRoutes | `backend/src/routes/groupRoutes.ts` |

@@ -1,0 +1,66 @@
+@startuml 006-class
+title 006 類別圖：老師導覽項目與標註「目前這一題」
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+
+interface TeacherNavItem {
+  +label: string <<搶答活動／題目管理／學生管理>>
+  +path: string
+}
+
+interface TeacherLayoutProps {
+  +title: string
+  +children: ReactNode
+}
+
+interface SideMenuProps {
+  +open: boolean
+  +currentPath: string
+  +items: readonly TeacherNavItem[]
+  +onClose: () => void
+}
+
+interface AnnotationEditor {
+  +target: Target | null
+  +selected: CellRef | null
+  +message: string | null
+  +stepText: string
+  +currentKey: string | null <<006>>
+  +currentIndex: number <<006，-1 表示沒有題目>>
+  +goTo: (key: string) => void <<006，先取消進行中步驟>>
+  +goPrev: () => void <<006>>
+  +goNext: () => void <<006>>
+  +addQuestion: () => void <<006：切到新題目>>
+  +removeQuestion: (key: string) => void <<006：切到後一題或新的最後一題>>
+  +move: (key: string, delta: -1 | 1) => void <<006：目前這一題跟著移動>>
+  +handleCellClick: (ref: CellRef) => void
+}
+
+interface QuestionOverviewItem {
+  +key: string
+  +title: string
+  +hasIssue: boolean
+  +current: boolean
+}
+
+interface CellMark {
+  +label: string
+  +tone: MarkTone
+  +current: boolean? <<006：目前這一題>>
+}
+
+interface AnnotationDocument <<003>> {
+  +questions: AnnotatedQuestion[]
+}
+
+note "TEACHER_NAV_ITEMS: readonly TeacherNavItem[]\n（固定 3 項，順序：搶答活動 /teacher、\n題目管理 /teacher/questions、學生管理 /teacher/students）" as N1
+N1 .. TeacherNavItem
+
+TeacherLayoutProps ..> SideMenuProps : TeacherLayout 持有 menuOpen 並渲染 SideMenu
+SideMenuProps "1" o-- "3" TeacherNavItem
+AnnotationEditor ..> AnnotationDocument : currentKey 指向其中一題
+AnnotationEditor ..> QuestionOverviewItem : overviewOf(doc, validation, currentKey)
+AnnotationEditor ..> CellMark : marksFor(doc, currentKey)
+@enduml

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router';
 import {
   normalizeAnnotations,
   validateAnnotations,
@@ -16,7 +15,7 @@ import {
 } from '../api/apiClient';
 import { Button } from '../components/Button';
 import { ErrorMessage } from '../components/ErrorMessage';
-import { Layout } from '../components/Layout';
+import { TeacherLayout } from '../components/TeacherLayout';
 import { AnnotationPanel, marksFor, useAnnotationEditor } from '../questions/AnnotationPanel';
 import { GoogleConnectionPanel } from '../questions/GoogleConnectionPanel';
 import { ImportPreview } from '../questions/ImportPreview';
@@ -126,17 +125,8 @@ export function QuestionManagePage() {
   const sheets = tabChoices ?? (draft && draft.sheets.length > 1 ? draft.sheets : undefined);
 
   return (
-    <Layout title="題目管理">
+    <TeacherLayout title="題目管理">
       <div className="flex min-w-0 flex-col gap-6">
-        <nav className="flex flex-wrap gap-2">
-          <Link
-            to="/teacher"
-            className="flex min-h-11 items-center rounded-md border border-cream-300 bg-cream-100 px-4 font-medium"
-          >
-            學生帳號與組別管理
-          </Link>
-        </nav>
-
         <GoogleConnectionPanel onStatus={onStatus} />
 
         <section
@@ -186,7 +176,7 @@ export function QuestionManagePage() {
           }
         />
       </div>
-    </Layout>
+    </TeacherLayout>
   );
 }
 
@@ -351,7 +341,7 @@ function DraftWorkspace({
         <SheetGrid
           grid={draft.grid}
           onCellClick={editor.handleCellClick}
-          marks={marksFor(state.doc)}
+          marks={marksFor(state.doc, editor.currentKey)}
           selected={editor.selected}
         />
         <div

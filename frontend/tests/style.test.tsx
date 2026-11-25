@@ -11,7 +11,7 @@ import { GroupManagePanel } from '../src/pages/GroupManagePanel';
 import { LoginPage } from '../src/pages/LoginPage';
 import { StudentCreatePanel } from '../src/pages/StudentCreatePanel';
 import { StudentHome } from '../src/pages/StudentHome';
-import { TeacherDashboard } from '../src/pages/TeacherDashboard';
+import { StudentManagePage } from '../src/pages/StudentManagePage';
 import { QuestionManagePage } from '../src/pages/QuestionManagePage';
 import { draftView } from './questionFixtures';
 import { mockMe, teacherUser } from './utils';
@@ -47,7 +47,7 @@ afterEach(() => vi.restoreAllMocks());
 
 const PAGES: [string, () => ReactElement, boolean][] = [
   ['LoginPage', () => <LoginPage />, false],
-  ['TeacherDashboard', () => <TeacherDashboard />, true],
+  ['StudentManagePage', () => <StudentManagePage />, true],
   ['StudentCreatePanel', () => <StudentCreatePanel />, true],
   ['GroupManagePanel', () => <GroupManagePanel />, true],
   ['StudentHome', () => <StudentHome />, true],

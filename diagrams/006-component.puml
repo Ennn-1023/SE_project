@@ -1,0 +1,69 @@
+@startuml 006-component
+title 006 組件圖：老師端側邊選單導覽＋題目標註逐題切換
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+
+actor "老師" as Teacher
+
+package "前端（瀏覽器，RWD）" as FE {
+  package "路由與頁框" {
+    [路由表\nAppRoutes\n(/teacher → 搶答活動、新增 /teacher/students、移除 /dev)] as Routes
+    [路由守衛\nGuard(role=TEACHER)\n(001)] as Guard
+    [老師頁框\nTeacherLayout\n(頁首左上角三條線按鈕)] as TLayout
+    [側邊選單\nSideMenu\n(搶答活動／題目管理／學生管理)] as Menu
+    [共用頁框\nLayout\n(001，學生端維持原樣)] as Layout
+  }
+  package "老師畫面" {
+    [搶答活動頁\nActivityControlPage\n(004/005，老師預設畫面)] as ActPage
+    [題目管理頁\nQuestionManagePage\n(003)] as QPage
+    [學生管理頁\nStudentManagePage\n(新：取代 TeacherDashboard)] as StuPage
+  }
+  package "學生管理區塊（001，搬移）" {
+    [StudentCreatePanel] as StuCreate
+    [GroupManagePanel] as GroupPanel
+  }
+  package "題目標註（003 擴充）" {
+    [標註面板\nAnnotationPanel\n(只顯示目前這一題)] as AnnPanel
+    [逐題切換列\nQuestionPager\n(上一題／下一題／第 X 題／共 N 題)] as Pager
+    [題目總覽\nQuestionOverview\n(題號按鈕＋錯誤標示)] as Overview
+    [標註編輯狀態\nuseAnnotationEditor\n(新增 currentKey)] as Editor
+    [試算表格線\nSheetGrid\n(目前這一題角標醒目)] as Grid
+  }
+}
+
+package "後端（伺服器）" as BE {
+  [既有 API（001～005）\n本功能不變更] as API
+  [Dev 模擬 API /api/dev\n(僅供開發與整合測試，保留)] as DevApi
+}
+
+Teacher --> TLayout
+Routes --> Guard
+Guard --> ActPage
+Guard --> QPage
+Guard --> StuPage
+ActPage --> TLayout
+QPage --> TLayout
+StuPage --> TLayout
+TLayout --> Menu : 開啟／收起
+Menu ..> Routes : 切換畫面
+StuPage --> StuCreate
+StuPage --> GroupPanel
+StuCreate <..> GroupPanel : refreshKey 互相連動
+QPage --> AnnPanel
+QPage --> Grid
+AnnPanel --> Pager
+AnnPanel --> Overview
+AnnPanel --> Editor
+Grid ..> Editor : 點選格子
+ActPage --> API
+QPage --> API
+StuCreate --> API
+GroupPanel --> API
+
+note right of DevApi
+  前端已不再呼叫；
+  DevTeacherPanel 與 /dev 路由移除
+end note
+@enduml

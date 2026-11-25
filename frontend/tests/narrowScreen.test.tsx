@@ -1,11 +1,12 @@
 /**
  * 窄螢幕（< 640px）時標註面板不遮擋格子與「預覽匯入」（手動驗證情境 13、12 發現的問題；FR-034）。
  */
-import { screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api/apiClient';
 import { QuestionManagePage } from '../src/pages/QuestionManagePage';
+import { QuestionOverview } from '../src/questions/QuestionOverview';
 import { draftView } from './questionFixtures';
 import { mockMe, renderAt, teacherUser } from './utils';
 
@@ -236,5 +237,51 @@ describe('寫回與匯出在 375px 的版面（005 SC-010）', () => {
     expect(screen.getByRole('link', { name: '開啟試算表' }).className).toContain('min-h-11');
     expect(screen.getByRole('button', { name: '關閉' }).className).toContain('min-h-11');
     expect(screen.getByRole('button', { name: '匯出結果 CSV' }).className).toContain('min-h-11');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 006 SC-005：360px 寬時側邊選單與題目總覽不造成水平捲動
+// ---------------------------------------------------------------------------
+
+/** 會造成溢出的固定寬度 class（例如 w-[400px]、min-w-[500px]、w-96 以上的固定寬） */
+const FIXED_WIDTH = /(^|\s)(min-)?w-(\[\d+px\]|(9[6-9]|[1-9]\d{2,}))(\s|$)/;
+
+function expectNoFixedWidth(root: Element) {
+  for (const node of root.querySelectorAll<HTMLElement>('*')) {
+    expect(node.className.toString(), node.outerHTML.slice(0, 80)).not.toMatch(FIXED_WIDTH);
+    expect(node.style.width).toBe('');
+  }
+}
+
+describe('窄螢幕（360px）的老師導覽與題目總覽（006 SC-005）', () => {
+  it('打開的側邊選單寬度以 min(80vw,18rem) 限制，沒有固定像素寬，項目觸控區 ≥ 44px', async () => {
+    mockScreen(true);
+    renderAt('/teacher/questions', <QuestionManagePage />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: '開啟選單' }));
+    const menu = screen.getByRole('dialog', { name: '老師功能選單' });
+    expect(menu.className).toContain('w-[min(80vw,18rem)]');
+    expectNoFixedWidth(menu);
+    for (const link of within(menu).getAllByRole('link')) {
+      expect(link.className).toContain('min-h-11');
+    }
+  });
+
+  it('30 題的題目總覽以 flex-wrap 自動換行，按鈕觸控區 ≥ 44px', () => {
+    mockScreen(true);
+    const items = Array.from({ length: 30 }, (_, i) => ({
+      key: `k${i + 1}`,
+      title: `第 ${i + 1} 題`,
+      hasIssue: i % 7 === 0,
+      current: i === 0,
+    }));
+    render(<QuestionOverview items={items} onSelect={vi.fn()} />);
+    const nav = screen.getByRole('navigation', { name: '題目總覽' });
+    expect(nav.querySelector('ul')!.className).toContain('flex-wrap');
+    expectNoFixedWidth(nav);
+    const buttons = within(nav).getAllByRole('button');
+    expect(buttons).toHaveLength(30);
+    for (const b of buttons) expect(b.className).toContain('min-h-11');
   });
 });

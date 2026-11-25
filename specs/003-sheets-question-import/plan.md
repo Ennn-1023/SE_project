@@ -152,7 +152,7 @@ frontend/tests/                        # QuestionManagePage、SheetGrid、Annota
 
 | 組件 | 檔案 | 組件 | 檔案 |
 |------|------|------|------|
-| TeacherDashboard | `frontend/src/pages/TeacherDashboard.tsx` | GoogleRoutes | `backend/src/routes/googleRoutes.ts` |
+| StudentManagePage | `frontend/src/pages/StudentManagePage.tsx`（006 由 TeacherDashboard 改名） | GoogleRoutes | `backend/src/routes/googleRoutes.ts` |
 | QuestionManagePage | `frontend/src/pages/QuestionManagePage.tsx` | QuestionImportRoutes | `backend/src/routes/questionImportRoutes.ts` |
 | GoogleConnectionPanel | `frontend/src/questions/GoogleConnectionPanel.tsx` | QuestionSetRoutes | `backend/src/routes/questionSetRoutes.ts` |
 | SheetLinkForm | `frontend/src/questions/SheetLinkForm.tsx` | RequireAuth / RequireRole | `backend/src/middleware/requireAuth.ts`、`backend/src/middleware/requireRole.ts`、`backend/src/middleware/validate.ts`、`backend/src/middleware/errorHandler.ts` |

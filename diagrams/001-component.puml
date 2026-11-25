@@ -11,7 +11,7 @@ actor "學生" as Student
 package "前端（瀏覽器，RWD）" as FE {
   [UI 風格系統\n(米白色系 / 撞色按鈕 tokens)] as Theme
   [登入頁\nLoginPage] as LoginPage
-  [老師管理頁\nTeacherDashboard] as TeacherPage
+  [學生管理頁\nStudentManagePage\n(006 由 TeacherDashboard 改名)] as TeacherPage
   [建立學生帳號\nStudentCreatePanel] as CreatePanel
   [組別管理\nGroupManagePanel] as GroupManage
   [學生首頁\nStudentHome] as StudentHome
