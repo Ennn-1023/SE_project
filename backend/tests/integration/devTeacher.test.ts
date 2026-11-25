@@ -44,8 +44,8 @@ describe('模擬老師操作（US6、Q-T16、FR-022、FR-023）', () => {
     expect(res.status).toBe(409);
     expect(res.body.error).toMatchObject({
       code: 'INVALID_TRANSITION',
-      message: '目前階段（作答中）不能執行「開放題目」',
-      hint: '只有在「等待開放」階段可以執行',
+      message: '目前第 1 題作答中',
+      hint: '請先結束搶答再開放其他題目',
     });
     const status = (await t.http.get('/api/dev/teacher/status').set('Cookie', t.teacherCookie)).body;
     expect(status).toMatchObject({ phase: 'ANSWERING', currentQuestionId: 'Q1' });
@@ -57,7 +57,7 @@ describe('模擬老師操作（US6、Q-T16、FR-022、FR-023）', () => {
     expect(res.body.error).toEqual({
       code: 'INVALID_SECONDS',
       field: 'seconds',
-      message: '作答秒數必須是 5–600 的整數',
+      message: '作答秒數須為 5～600 的整數',
       hint: '例如 60',
     });
     expect(await phase()).toBe('WAITING');
@@ -78,7 +78,11 @@ describe('模擬老師操作（US6、Q-T16、FR-022、FR-023）', () => {
     await t.teacher.next();
     const res = await t.teacher.open('Q1', 60);
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatchObject({ code: 'QUESTION_ALREADY_CLOSED', message: '此題已結束，不能再次開放' });
+    expect(res.body.error).toMatchObject({
+      code: 'QUESTION_ALREADY_CLOSED',
+      message: '第 1 題已結束',
+      hint: '如需讓各組重答，請使用「重新開放」',
+    });
     expect(await phase()).toBe('WAITING');
   });
 
@@ -100,9 +104,13 @@ describe('模擬老師操作（US6、Q-T16、FR-022、FR-023）', () => {
     expect(await phase()).toBe('WAITING');
   });
 
-  it('非作答中不能 time-up／close；非已結束不能 next', async () => {
+  it('等待開放時不能 time-up／close；回到等待在等待開放時為無變化（004 research.md R11）', async () => {
     expect((await t.teacher.timeUp()).body.error.code).toBe('INVALID_TRANSITION');
     expect((await t.teacher.close()).body.error.code).toBe('INVALID_TRANSITION');
+    const back = await t.teacher.next();
+    expect(back.status).toBe(200);
+    expect(back.body).toMatchObject({ phase: 'WAITING' });
+    await t.teacher.open('Q1', 60);
     expect((await t.teacher.next()).body.error.code).toBe('INVALID_TRANSITION');
   });
 

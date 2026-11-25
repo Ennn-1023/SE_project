@@ -1,4 +1,49 @@
 /** ApiClient（組件圖）：集中處理 fetch、JSON 與一致錯誤格式（contracts/openapi.yaml）。 */
+import type {
+  ResultBoardView,
+  TeacherActivityView,
+  WritebackConfirmBody,
+  WritebackOutcomeView,
+  WritebackPreviewView,
+  AnnotationDocument,
+  GridSnapshot,
+  QuestionSetView,
+  SheetSource,
+  SheetTab,
+  ValidationResult,
+} from '@buzzer/shared';
+
+// ---------- 003 題目匯入（specs/003-sheets-question-import/contracts/openapi.yaml） ----------
+
+export interface GoogleStatus {
+  configured: boolean;
+  connected: boolean;
+  googleEmail?: string;
+}
+
+export interface ImportDraftView {
+  id: string;
+  revision: number;
+  expiresAt: string;
+  source: SheetSource;
+  sheets: SheetTab[];
+  grid: GridSnapshot;
+  annotations: AnnotationDocument;
+  restoredCount: number;
+  validation: ValidationResult;
+}
+
+export interface SaveAnnotationsResult {
+  revision: number;
+  annotations: AnnotationDocument;
+  validation: ValidationResult;
+  expiresAt: string;
+}
+
+export interface PreviewResult {
+  preview: QuestionSetView;
+  replaces: { spreadsheetTitle: string; sheetTitle: string; questionCount: number } | null;
+}
 
 export type Role = 'TEACHER' | 'STUDENT';
 
@@ -107,6 +152,7 @@ export function createApiClient(fetchImpl: FetchLike = (i, init) => fetch(i, ini
     get: <T>(path: string) => request<T>('GET', path),
     post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
     put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
+    del: <T>(path: string) => request<T>('DELETE', path),
   };
 }
 
@@ -140,4 +186,118 @@ export const api = {
         groupNumber,
       },
     ),
+  // 003：Google 連結
+  getGoogleStatus: () => client.get<GoogleStatus>('/google/status'),
+  startGoogleAuth: () => client.post<{ authUrl: string }>('/google/oauth/start'),
+  disconnectGoogle: () => client.del<void>('/google/connection'),
+  // 003：學習單匯入
+  createDraft: (link: string, sheetId?: number) =>
+    client.post<{ draft: ImportDraftView }>(
+      '/question-import/drafts',
+      sheetId === undefined ? { link } : { link, sheetId },
+    ),
+  getCurrentDraft: () =>
+    client.get<{ draft: ImportDraftView | null }>('/question-import/drafts/current'),
+  saveAnnotations: (draftId: string, revision: number, annotations: AnnotationDocument) =>
+    client.put<SaveAnnotationsResult>(
+      `/question-import/drafts/${encodeURIComponent(draftId)}/annotations`,
+      { revision, annotations },
+    ),
+  previewImport: (draftId: string) =>
+    client.post<PreviewResult>(`/question-import/drafts/${encodeURIComponent(draftId)}/preview`),
+  confirmImport: (draftId: string) =>
+    client.post<{ questionSet: QuestionSetView }>(
+      `/question-import/drafts/${encodeURIComponent(draftId)}/confirm`,
+    ),
+  cancelDraft: (draftId: string) =>
+    client.del<void>(`/question-import/drafts/${encodeURIComponent(draftId)}`),
+  // 003：目前題目集
+  getQuestionSet: () => client.get<{ questionSet: QuestionSetView | null }>('/question-set'),
+  clearQuestionSet: () => client.del<void>('/question-set'),
+  reimportQuestionSet: () => client.post<{ draft: ImportDraftView }>('/question-set/reimport'),
+  // 004：老師活動控制與監控（specs/004-activity-control-monitor/contracts/openapi.yaml）
+  getActivity: () => client.get<TeacherActivityView>('/teacher/activity'),
+  startActivity: () => client.post<TeacherActivityView>('/teacher/activity/start'),
+  openQuestion: (questionId: string, seconds: number) =>
+    client.post<TeacherActivityView>('/teacher/activity/open', { questionId, seconds }),
+  reopenQuestion: (questionId: string, seconds: number) =>
+    client.post<TeacherActivityView>('/teacher/activity/reopen', {
+      questionId,
+      seconds,
+      confirm: true,
+    }),
+  closeQuestion: () => client.post<TeacherActivityView>('/teacher/activity/close'),
+  backToWaiting: () => client.post<TeacherActivityView>('/teacher/activity/back-to-waiting'),
+  endActivity: () => client.post<TeacherActivityView>('/teacher/activity/end'),
+  getQuestionResult: (questionId: string) =>
+    client.get<ResultBoardView>(
+      `/teacher/activity/questions/${encodeURIComponent(questionId)}/result`,
+    ),
+  // 005：答案寫回 Google 試算表、匯出結果 CSV（specs/005-sheets-writeback-csv-export/contracts/openapi.yaml）
+  writebackPreview: () => client.post<WritebackPreviewView>('/teacher/activity/writeback/preview'),
+  writebackConfirm: (body: WritebackConfirmBody) =>
+    client.post<WritebackOutcomeView>('/teacher/activity/writeback/confirm', body),
+  downloadResultsCsv: () => downloadResultsCsv(),
 };
+
+/** 從 Content-Disposition 取出檔名（優先 filename*=UTF-8''…） */
+export function filenameFromDisposition(header: string | null): string {
+  const star = header ? /filename\*=UTF-8''([^;]+)/i.exec(header) : null;
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1]);
+    } catch {
+      /* 改用 ASCII 檔名 */
+    }
+  }
+  const plain = header ? /filename="([^"]+)"/i.exec(header) : null;
+  return plain?.[1] ?? 'activity-results.csv';
+}
+
+/**
+ * 下載結果 CSV（005 research R11）：以 fetch 取得，成功時轉 Blob 觸發下載；
+ * 失敗時解析一致的錯誤格式，讓畫面顯示原因而不是下載一份錯誤內容。回傳檔名。
+ */
+export async function downloadResultsCsv(
+  fetchImpl: FetchLike = (i, init) => fetch(i, init),
+): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetchImpl('/api/teacher/activity/export.csv', { credentials: 'same-origin' });
+  } catch {
+    throw new ApiError(
+      0,
+      'NETWORK_ERROR',
+      '無法連線到伺服器',
+      undefined,
+      '請確認網路連線後再試一次',
+    );
+  }
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: Record<string, unknown> } | null;
+    const e = data?.error;
+    const err = new ApiError(
+      res.status,
+      typeof e?.code === 'string' ? e.code : 'UNKNOWN_ERROR',
+      typeof e?.message === 'string' ? e.message : '系統發生錯誤，請稍後再試',
+      typeof e?.field === 'string' ? e.field : undefined,
+      typeof e?.hint === 'string' ? e.hint : undefined,
+    );
+    if (err.code === 'UNAUTHENTICATED') authEvents.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
+    throw err;
+  }
+  const filename = filenameFromDisposition(res.headers.get('Content-Disposition'));
+  const url = URL.createObjectURL(await res.blob());
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  return filename;
+}

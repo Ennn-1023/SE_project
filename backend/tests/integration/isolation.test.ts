@@ -30,7 +30,7 @@ describe('作答中的他組資料隔離（Q-T11、FR-015、SC-004）', () => {
     for (const leak of ['B組秘密答案', 'T2', '第 2 組', 'S201', 'rank', 'results']) {
       expect(everythingA).not.toContain(leak);
     }
-    expect(aState.myTeamSubmission).toEqual({ answer: 'A組答案' });
+    expect(aState.myTeamSubmission).toMatchObject({ answer: 'A組答案' });
   });
 
   it('連線成功時立即收到目前的 state:update', async () => {

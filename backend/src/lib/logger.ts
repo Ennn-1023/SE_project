@@ -7,8 +7,14 @@ export interface Logger {
   error(message: string, data?: Record<string, unknown>): void;
 }
 
-export const SENSITIVE_KEY = /password|secret|token|hash|cookie|authorization/i;
+export const SENSITIVE_KEY =
+  /password|secret|token|hash|cookie|authorization|verifier|encryptionkey/i;
+/** 完整鍵名比對的機敏欄位（避免誤遮 errorCode 等）：OAuth 授權碼、金鑰。 */
+const SENSITIVE_EXACT = new Set(['code', 'authcode', 'authorizationcode', 'key']);
 export const MASK = '[REDACTED]';
+
+export const isSensitiveKey = (key: string) =>
+  SENSITIVE_KEY.test(key) || SENSITIVE_EXACT.has(key.toLowerCase());
 
 export function maskSensitive(value: unknown, seen = new WeakSet<object>()): unknown {
   if (value === null || typeof value !== 'object') return value;
@@ -20,7 +26,7 @@ export function maskSensitive(value: unknown, seen = new WeakSet<object>()): unk
   }
   const out: Record<string, unknown> = {};
   for (const [key, v] of Object.entries(value)) {
-    out[key] = SENSITIVE_KEY.test(key) ? MASK : maskSensitive(v, seen);
+    out[key] = isSensitiveKey(key) ? MASK : maskSensitive(v, seen);
   }
   return out;
 }

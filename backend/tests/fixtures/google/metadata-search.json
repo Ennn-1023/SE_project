@@ -1,0 +1,38 @@
+{
+  "matchedDeveloperMetadata": [
+    {
+      "developerMetadata": {
+        "metadataKey": "qimport.set",
+        "metadataValue": "{\"v\":1,\"qs\":[]}",
+        "location": { "locationType": "SHEET", "sheetId": 0 }
+      }
+    },
+    {
+      "developerMetadata": {
+        "metadataKey": "qimport.row",
+        "metadataValue": "[]",
+        "location": {
+          "locationType": "ROW",
+          "dimensionRange": { "sheetId": 0, "dimension": "ROWS", "startIndex": 4, "endIndex": 5 }
+        }
+      }
+    },
+    {
+      "developerMetadata": {
+        "metadataKey": "qimport.col",
+        "metadataValue": "{\"c\":\"k1\"}",
+        "location": {
+          "locationType": "COLUMN",
+          "dimensionRange": { "sheetId": 0, "dimension": "COLUMNS", "startIndex": 6, "endIndex": 7 }
+        }
+      }
+    },
+    {
+      "developerMetadata": {
+        "metadataKey": "other.app",
+        "metadataValue": "x",
+        "location": { "locationType": "SHEET", "sheetId": 0 }
+      }
+    }
+  ]
+}

@@ -43,7 +43,8 @@ describe('DevTeacherPanel（US6）', () => {
   it.each([
     ['時間到', '/api/dev/teacher/time-up'],
     ['手動結束', '/api/dev/teacher/close'],
-    ['下一題', '/api/dev/teacher/next'],
+    ['回到等待畫面', '/api/dev/teacher/back-to-waiting'],
+    ['以 mock 題目開始活動', '/api/dev/teacher/mock-activity'],
     ['結束活動', '/api/dev/teacher/end'],
     ['重設', '/api/dev/teacher/reset'],
   ])('「%s」按鈕呼叫 %s', async (label, path) => {
@@ -64,9 +65,9 @@ describe('DevTeacherPanel（US6）', () => {
       'fetch',
       routeFetch({
         'GET /api/dev/teacher/status': () => json(status()),
-        'POST /api/dev/teacher/next': () =>
+        'POST /api/dev/teacher/back-to-waiting': () =>
           json(
-            { error: { code: 'INVALID_TRANSITION', field: null, message: '目前階段（等待開放）不能執行「下一題」', hint: '只有在「已結束」階段可以執行' } },
+            { error: { code: 'INVALID_TRANSITION', field: null, message: '目前階段（作答中）不能執行「回到等待畫面」', hint: '只有在「已結束」階段可以執行' } },
             409,
           ),
       }),
@@ -74,9 +75,9 @@ describe('DevTeacherPanel（US6）', () => {
     const user = userEvent.setup();
     render(<DevTeacherPanel />);
     await screen.findByText('等待開放');
-    await user.click(screen.getByRole('button', { name: '下一題' }));
+    await user.click(screen.getByRole('button', { name: '回到等待畫面' }));
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('目前階段（等待開放）不能執行「下一題」');
+    expect(alert).toHaveTextContent('目前階段（作答中）不能執行「回到等待畫面」');
     expect(alert).toHaveTextContent('只有在「已結束」階段可以執行');
   });
 

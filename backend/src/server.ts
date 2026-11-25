@@ -5,14 +5,18 @@ import { createApp, createContainer, type AppDeps } from './app.js';
 import { Config, ConfigError } from './config/env.js';
 import type { AppContext, ViewFor } from './context.js';
 import { openDb, type Db } from './data/db.js';
-import { seedMockData } from './data/mock/seed.js';
 import { Repository } from './data/repositories.js';
 import { ActivityStateMachine } from './domain/activityStateMachine.js';
 import { ResultService } from './domain/resultService.js';
 import { SubmissionService } from './domain/submissionService.js';
 import { buildView } from './domain/visibilityFilter.js';
 import { createLogger } from './lib/logger.js';
+import { ActivityService } from './services/activityService.js';
+import { MonitorViewBuilder } from './services/monitorViewBuilder.js';
 import { createRealtime } from './realtime/socketServer.js';
+import { ActivityResultReader } from './services/activityResultReader.js';
+import { CsvExportService } from './services/csvExportService.js';
+import { WritebackService } from './services/writebackService.js';
 
 export interface RunningServer {
   url: string;
@@ -24,7 +28,7 @@ export interface RunningServer {
 }
 
 /**
- * 組裝並啟動伺服器：DB（含 migration）→ 001 容器 → 搶答狀態恢復 → HTTP（Express）+ Socket.IO。
+ * 組裝並啟動伺服器：DB（含 migration）→ 001 容器 → 搶答狀態恢復 → HTTP（Express）+ Socket.IO（/student、/teacher）。
  * 001 的登入／組別與 002 的搶答共用同一個 DB、session 與錯誤格式。
  */
 export async function startServer(
@@ -34,36 +38,66 @@ export async function startServer(
   const db = opts.db ?? openDb(config.databasePath);
   const container = createContainer({ ...opts, config, db });
   const repo = new Repository(db);
-  seedMockData(repo);
 
   const machine = new ActivityStateMachine(repo);
-  if (machine.recoverAfterRestart()) {
-    container.logger.warn('伺服器在作答中重啟，已捨棄該題的送出並回到「等待開放」');
-  }
-
   const submissions = new SubmissionService(machine);
-  machine.hooks.onQuestionOpened = (questionId) => submissions.startQuestion(questionId);
-  machine.hooks.onReset = () => submissions.clear();
-
   const results = new ResultService(repo);
-  // 結束時先以交易寫入送出與結果，狀態機之後才推播 CLOSED（002 FR-019、FR-020）
-  machine.hooks.onQuestionClosed = (questionId, reason) => {
-    results.finalize(machine.activity.id, questionId, submissions.all(), reason);
-  };
+  const monitor = new MonitorViewBuilder({
+    machine,
+    repo,
+    submissions,
+    questionSet: () => {
+      const set = container.repos.questionSets.findCurrent();
+      return set
+        ? {
+            questionCount: set.questions.length,
+            sourceTitle: `${set.set.source.spreadsheetTitle}／${set.set.source.sheetTitle}`,
+          }
+        : null;
+    },
+  });
+  // 004：ActivityService 註冊題目開放／結束 hooks（參與組別、結果、事件）
+  const activities = new ActivityService({
+    machine,
+    repo,
+    submissions,
+    results,
+    monitor,
+    events: container.repos.activityEvents,
+    questionSets: container.repos.questionSets,
+  });
+  machine.hooks.onReset = () => submissions.clear();
+  container.activityLock.bind(() => machine.activity?.phase ?? null);
+
+  // 伺服器在作答中重啟：捨棄該題本輪送出並回到「等待開放」（002 FR-020a、004 FR-026）
+  const notice = machine.recoverAfterRestart();
+  if (notice) {
+    container.logger.warn(notice);
+    const activity = machine.activity!;
+    container.repos.activityEvents.append({
+      activityId: activity.id,
+      at: new Date(),
+      actorId: null,
+      type: 'RESTART_CANCELLED',
+      questionId: null,
+      detail: notice,
+    });
+  }
 
   const viewFor: ViewFor = (student) => {
     const activity = machine.activity;
-    const qid = activity.currentQuestionId;
-    // 作答中：記憶體中的送出；已結束：已寫入資料庫的送出（重啟後也能還原）
+    const qid = activity?.currentQuestionId ?? null;
+    // 作答中：記憶體中的送出；已結束：已寫入資料庫的有效送出（重啟後也能還原）
     const current =
-      activity.phase === 'CLOSED' && qid
+      activity && activity.phase === 'CLOSED' && qid
         ? repo.listSubmissions(activity.id, qid)
         : submissions.all();
     return buildView({
       activity,
       question: qid ? repo.getQuestion(qid) : null,
+      parts: qid ? repo.getQuestionParts(qid) : [],
       myTeam: student.teamId ? repo.getTeam(student.teamId) : null,
-      teams: repo.listTeams(activity.id),
+      teams: activity ? repo.listTeams(activity.id) : [],
       submissions: current,
       now: Date.now(),
     });
@@ -79,9 +113,42 @@ export async function startServer(
     users: container.repos.users,
     repo,
     viewFor,
+    teacherView: () => monitor.build(),
   });
-  const ctx: AppContext = { config, repo, machine, submissions, viewFor, realtime };
-  machine.hooks.onChange = () => realtime.pushAll();
+  monitor.online = () => realtime.onlineStudents();
+  // 005：寫回與 CSV 共用同一份有效結果讀取（research R9）
+  const reader = new ActivityResultReader(repo);
+  const { clock, logger } = container;
+  const writeback = new WritebackService({
+    reader,
+    targets: container.repos.writebackTargets,
+    sheets: container.services.sheets,
+    codec: container.codec,
+    events: container.repos.exportEvents,
+    clock,
+    logger,
+  });
+  const csvExport = new CsvExportService({
+    reader,
+    events: container.repos.exportEvents,
+    clock,
+    logger,
+  });
+  const ctx: AppContext = {
+    config,
+    repo,
+    machine,
+    submissions,
+    viewFor,
+    realtime,
+    activities,
+    writeback,
+    csvExport,
+  };
+  machine.hooks.onChange = () => {
+    realtime.pushAll();
+    realtime.pushTeachers();
+  };
   appHandler = createApp({ config, db, container, buzzer: ctx }).app;
 
   await new Promise<void>((res) => httpServer.listen(config.port, res));

@@ -1,0 +1,71 @@
+@startuml 004-sequence-lifecycle
+title F5 時序圖：開始活動、鎖定題目集、重新整理恢復與結束活動
+skinparam backgroundColor #FAF7F0
+skinparam sequence {
+  ParticipantBackgroundColor #F5F0E6
+  ParticipantBorderColor #1F3A93
+  ArrowColor #1F3A93
+  LifeLineBorderColor #1F3A93
+}
+autonumber
+
+actor "老師" as T
+participant "ActivityControlPage" as TC
+participant "ActivityRoutes" as AR
+participant "ActivityService" as AS
+participant "QuestionSetRepository（003）" as QS
+participant "Repository（002 擴充）" as GS
+participant "ActivityStateMachine" as FSM
+participant "ActivityLockGuard" as LG
+participant "QuestionSetRoutes／Service（003）" as QR
+participant "SocketServer" as SK
+database "Repository" as DB
+
+== 開始活動 ==
+T -> TC : 按「開始活動」
+TC -> AR : POST /teacher/activity/start
+AR -> AS : startActivity(teacher)
+AS -> GS : hasRunningActivity()（已有未結束活動 → 409 ACTIVITY_ALREADY_RUNNING）
+AS -> QS : findCurrent() 取得目前題目集
+AS -> GS : memberCounts() 取得各組人數
+alt 沒有題目集
+  AS --> TC : 409「尚未匯入題目，請先到題目管理匯入學習單」
+else 沒有任何有成員的組別
+  AS --> TC : 409「尚無任何組別有學生，請先到組別管理分組」
+else 可以開始
+  AS -> GS : createActivity()：單一交易建立 Activity + 複製題目與小題（NOT_OPENED）
+  AS -> FSM : start() → phase=WAITING
+  AS -> DB : ActivityEvent(STARTED)
+  FSM -> SK : onChange
+  SK --> TC : teacher:update {WAITING, 題目清單, 0/6}
+  SK -> SK : 推送學生「等待老師開放題目」
+end
+
+== 活動中鎖定題目集 ==
+T -> QR : 重新匯入／清除題目集
+QR -> LG : assertQuestionSetMutable()
+LG -> FSM : 讀取階段（有未結束活動）
+LG --> T : 409「搶答活動進行中，無法變更題目集；請先結束活動」
+
+== 重新整理／斷線恢復 ==
+T -> TC : 重新整理頁面
+TC -> AR : GET /teacher/activity
+AR --> TC : TeacherActivityView（階段、endsAt、serverNow、題目清單、監控）
+TC -> SK : 重新連線（session cookie）→ 加入 teacher room
+SK --> TC : teacher:update（最新狀態）
+
+== 結束活動 ==
+T -> TC : 按「結束活動」→ 確認「尚有 4 題未開放…」
+TC -> AR : POST /teacher/activity/end
+AR -> AS : endActivity(teacher)
+AS -> FSM : end()
+opt 作答中
+  FSM -> FSM : closeQuestion(ACTIVITY_ENDED) → 產生結果
+end
+FSM -> DB : phase=ENDED、endedAt
+AS -> DB : ActivityEvent(ENDED)
+FSM -> SK : onChange
+SK --> TC : teacher:update {ENDED, 活動摘要}
+SK -> SK : 推送學生「活動已結束，感謝參與」
+note over LG : ENDED 後題目集與組別解除鎖定，可「開始新活動」
+@enduml

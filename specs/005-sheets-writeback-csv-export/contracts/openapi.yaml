@@ -1,0 +1,215 @@
+openapi: 3.1.0
+info:
+  title: 課程搶答系統 API — F10/F11（答案寫回 Google 試算表、活動結果匯出 CSV）
+  version: 0.1.0
+  description: |
+    所有路徑皆位於 `/api` 之下，沿用 001 的 `sid` cookie、`application/json` 與 `ErrorResponse` 格式。
+    `/teacher/activity/writeback/*` 與 `/teacher/activity/export.csv` 只限老師：
+    未登入 401 `UNAUTHENTICATED`、學生 403 `FORBIDDEN`「權限不足」（FR-004），且回應不含任何結果資料。
+    兩者都只處理「最近一場活動」中已結束題目的有效輪次（FR-001、FR-002；../data-model.md §2）。
+servers:
+  - url: /api
+
+security:
+  - sessionCookie: []
+
+tags:
+  - name: writeback
+  - name: export
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: sid
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, field, message, hint]
+          properties:
+            code:
+              type: string
+              description: |
+                本功能新增或使用的錯誤碼（HTTP 狀態；訊息見 ../research.md R12）：
+                - 400 `VALIDATION_ERROR`（field = previewId／mode／fallbackKeys）
+                - 400 `WRITEBACK_OVERWRITE_REQUIRED`
+                - 401 `UNAUTHENTICATED`、403 `FORBIDDEN`「權限不足」
+                - 403 `SHEET_NO_EDIT_PERMISSION`、403 `SHEET_PROTECTED_RANGE`
+                - 404 `NO_ACTIVITY_RESULTS`、404 `SHEET_NOT_FOUND`、404 `SHEET_TAB_NOT_FOUND`
+                - 409 `GOOGLE_NOT_CONNECTED`、409 `GOOGLE_AUTH_EXPIRED`
+                - 409 `WRITEBACK_NO_SOURCE`、409 `WRITEBACK_NOTHING_TO_WRITE`、409 `WRITEBACK_NOT_THIS_SHEET`
+                - 409 `WRITEBACK_STALE`（details.questions = 變動的題號）、409 `WRITEBACK_IN_PROGRESS`
+                - 410 `WRITEBACK_PREVIEW_EXPIRED`
+                - 503 `GOOGLE_RATE_LIMITED`、503 `GOOGLE_UNAVAILABLE`、503 `GOOGLE_NOT_CONFIGURED`
+            field: { type: [string, 'null'] }
+            message: { type: string }
+            hint: { type: string }
+            details: { type: object }
+
+    WritebackTarget:
+      type: object
+      required: [spreadsheetTitle, sheetTitle, url]
+      properties:
+        spreadsheetTitle: { type: string }
+        sheetTitle: { type: string, description: 目前分頁名稱 }
+        url: { type: string, format: uri }
+
+    WritebackItem:
+      type: object
+      required: [key, questionNumber, partLabel, cell, fallbackCell, hidden, winnerTeamName, answer, currentContent, status]
+      properties:
+        key: { type: string, example: 'k3f9a:1', description: '`questionKey:partIndex`，用於 fallbackKeys' }
+        questionNumber: { type: string, example: '1' }
+        partLabel: { type: [string, 'null'], example: '（2）' }
+        cell: { type: [string, 'null'], example: 'H7', description: 依標註找到的目前位置 }
+        fallbackCell: { type: [string, 'null'], example: 'H5', description: 匯入當下位置 }
+        hidden: { type: boolean }
+        winnerTeamName: { type: string, example: 第 2 組 }
+        answer: { type: string, maxLength: 500 }
+        currentContent: { type: string, description: 目標格（或後備格）目前顯示值，純文字 }
+        status:
+          type: string
+          enum: [EMPTY, OVERWRITE, SAME_CONTENT, ANNOTATION_MISSING, ANNOTATION_DUPLICATED]
+
+    WritebackPreview:
+      type: object
+      required: [previewId, expiresAt, target, items, skipped, summary]
+      properties:
+        previewId: { type: string, pattern: '^[A-Za-z0-9_-]{12}$' }
+        expiresAt: { type: string, format: date-time }
+        target: { $ref: '#/components/schemas/WritebackTarget' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/WritebackItem' }
+        skipped:
+          type: array
+          items:
+            type: object
+            required: [questionNumber, reason]
+            properties:
+              questionNumber: { type: string }
+              reason: { type: string, enum: [NO_WINNER, NOT_OPENED, ANSWERING] }
+        summary:
+          type: object
+          required: [emptyCount, overwriteCount, sameCount, unresolvedCount, skippedQuestionCount]
+          properties:
+            emptyCount: { type: integer, minimum: 0 }
+            overwriteCount: { type: integer, minimum: 0 }
+            sameCount: { type: integer, minimum: 0 }
+            unresolvedCount: { type: integer, minimum: 0, description: ANNOTATION_MISSING＋ANNOTATION_DUPLICATED }
+            skippedQuestionCount: { type: integer, minimum: 0 }
+
+    WritebackOutcome:
+      type: object
+      required: [writtenCells, writtenQuestions, overwrittenCells, skippedCells, skippedReasons, spreadsheetUrl]
+      properties:
+        writtenCells: { type: integer, minimum: 0 }
+        writtenQuestions: { type: integer, minimum: 0 }
+        overwrittenCells: { type: integer, minimum: 0 }
+        skippedCells: { type: integer, minimum: 0 }
+        skippedReasons:
+          type: array
+          items:
+            type: object
+            required: [reason, count]
+            properties:
+              reason: { type: string, enum: [NON_EMPTY, ANNOTATION_MISSING, ANNOTATION_DUPLICATED] }
+              count: { type: integer, minimum: 1 }
+        spreadsheetUrl: { type: string, format: uri }
+
+    ConfirmBody:
+      type: object
+      additionalProperties: false
+      required: [previewId]
+      properties:
+        previewId: { type: string, pattern: '^[A-Za-z0-9_-]{12}$' }
+        mode:
+          type: string
+          enum: [OVERWRITE_ALL, SKIP_NON_EMPTY]
+          description: 預覽中有 OVERWRITE 項目時必填（FR-011）
+        fallbackKeys:
+          type: array
+          maxItems: 2000
+          uniqueItems: true
+          items: { type: string, pattern: '^[A-Za-z0-9_-]{4,12}:[0-9]$' }
+          description: 只能是本預覽 status = ANNOTATION_MISSING 的項目（FR-010）
+
+  responses:
+    Error:
+      description: 錯誤
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+paths:
+  /teacher/activity/writeback/preview:
+    post:
+      tags: [writeback]
+      summary: 產生寫回預覽（FR-006～FR-011）
+      description: |
+        讀取最近一場活動的來源試算表與分頁、依標註找出作答格目前位置並比對目前內容。
+        每位老師只保留最新一份預覽，15 分鐘後失效。不修改試算表。
+      responses:
+        '200':
+          description: 預覽
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WritebackPreview' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+
+  /teacher/activity/writeback/confirm:
+    post:
+      tags: [writeback]
+      summary: 確認寫回（FR-012～FR-016a）
+      description: |
+        重新讀取並比對預覽；一致時依 mode 與 fallbackKeys 以單一批次（RAW 純文字）寫入。
+        預覽後有變動 → 409 WRITEBACK_STALE 且不寫入任何格子。
+        同一預覽重複確認：寫回中 → 409 WRITEBACK_IN_PROGRESS；已完成 → 200 同一份結果（FR-015）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmBody' }
+      responses:
+        '200':
+          description: 寫回完成
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WritebackOutcome' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+
+  /teacher/activity/export.csv:
+    get:
+      tags: [export]
+      summary: 匯出最近一場活動結果 CSV（FR-017～FR-023）
+      description: |
+        格式見 csv-format.md。不需 Google 連結。不含學生姓名或學號。
+      responses:
+        '200':
+          description: CSV 檔
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+              example: "attachment; filename=\"activity-results.csv\"; filename*=UTF-8''%E6%90%B6%E7%AD%94%E7%B5%90%E6%9E%9C_20261124-0930.csv"
+          content:
+            text/csv; charset=utf-8:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }

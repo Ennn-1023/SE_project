@@ -1,0 +1,203 @@
+@startuml 005-class
+title F10/F11 類別圖：寫回目標、寫回預覽與 CSV 結果列
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+
+enum WritebackItemStatus {
+  EMPTY
+  OVERWRITE
+  SAME_CONTENT
+  ANNOTATION_MISSING
+  ANNOTATION_DUPLICATED
+}
+
+enum SkipReason {
+  NO_WINNER
+  NOT_OPENED
+  ANSWERING
+}
+
+enum OverwriteMode {
+  OVERWRITE_ALL
+  SKIP_NON_EMPTY
+}
+
+enum PreviewState {
+  READY
+  WRITING
+  DONE
+}
+
+enum CsvQuestionStatus {
+  CLOSED
+  ANSWERING
+  NOT_OPENED
+}
+
+enum ExportEventType {
+  WRITEBACK_SUCCEEDED
+  WRITEBACK_FAILED
+  CSV_EXPORTED
+}
+
+class WritebackTarget {
+  +activityId: string
+  +spreadsheetId: string
+  +spreadsheetTitle: string
+  +sheetId: number
+  +sheetTitle: string
+  +sourceUrl: string
+}
+
+class AnswerSlotFallback {
+  +activityId: string
+  +questionKey: string
+  +partIndex: number
+  +importedCell: CellRef
+}
+
+class WritebackPreview {
+  +previewId: string
+  +teacherId: number
+  +activityId: string
+  +target: WritebackTarget
+  +createdAt: Date
+  +resultFingerprint: string
+  +items: WritebackItem[]
+  +skipped: SkippedQuestion[]
+  +summary: WritebackSummary
+  +state: PreviewState
+  +outcome: WritebackOutcome | null
+}
+
+class WritebackItem {
+  +key: string
+  +questionKey: string
+  +questionNumber: string
+  +partIndex: number
+  +partLabel: string | null
+  +cell: CellRef | null
+  +fallbackCell: CellRef
+  +hidden: boolean
+  +winnerTeamName: string
+  +answer: string
+  +currentContent: string
+  +status: WritebackItemStatus
+}
+
+class SkippedQuestion {
+  +questionNumber: string
+  +reason: SkipReason
+}
+
+class WritebackSummary {
+  +emptyCount: number
+  +overwriteCount: number
+  +sameCount: number
+  +unresolvedCount: number
+  +skippedQuestionCount: number
+}
+
+class WritebackOutcome {
+  +writtenCells: number
+  +writtenQuestions: number
+  +overwrittenCells: number
+  +skippedCells: number
+  +skippedReasons: SkippedReasonCount[]
+  +spreadsheetUrl: string
+}
+
+class SkippedReasonCount {
+  +reason: string
+  +count: number
+}
+
+class CsvResultRow {
+  +questionNumber: string
+  +partLabel: string
+  +status: CsvQuestionStatus
+  +teamName: string
+  +rank: number | "未送出"
+  +isWinner: boolean
+  +elapsedSeconds: number | null
+  +answer: string | null
+}
+
+class ExportEvent {
+  +at: Date
+  +actorId: number
+  +activityId: string
+  +type: ExportEventType
+  +spreadsheetId: string | null
+  +written: number
+  +overwritten: number
+  +skipped: number
+  +rows: number
+  +failureCode: string | null
+}
+
+class ActivityResultReader {
+  +latestActivity(): Activity | null
+  +validResults(activityId): QuestionOutcome[]
+}
+
+class WritebackService {
+  +preview(teacherId): WritebackPreview
+  +confirm(teacherId, previewId, mode, fallbackKeys): WritebackOutcome
+  -resolveItems(activityId, sheet): WritebackItem[]
+  -recheck(preview): void
+}
+
+class CsvExportService {
+  +export(teacherId): CsvFile
+  +buildRows(outcomes): CsvResultRow[]
+}
+
+class CsvEncoder {
+  +encode(header, rows): string
+  +escapeField(value): string
+  +neutralizeFormula(value): string
+}
+
+class SheetsService <<003>> {
+  +readSheet(userId, spreadsheetId, sheetId): SheetData
+  +writeCells(userId, spreadsheetId, sheetId, updates): void
+}
+
+class AnnotationCodec <<003>> {
+  +decode(entries, grid): DecodeResult
+}
+
+class WritebackRules <<shared>> {
+  +validateOverwriteMode(input): OverwriteMode
+  +validateFallbackKeys(input, allowedKeys): string[]
+}
+
+WritebackTarget "1" *-- "1..*" AnswerSlotFallback
+WritebackPreview *-- WritebackTarget
+WritebackPreview "1" *-- "0..*" WritebackItem
+WritebackPreview "1" *-- "0..*" SkippedQuestion
+WritebackPreview *-- WritebackSummary
+WritebackPreview --> PreviewState
+WritebackPreview o-- "0..1" WritebackOutcome : 快取（DONE）
+WritebackOutcome "1" *-- "0..*" SkippedReasonCount
+WritebackItem --> WritebackItemStatus
+SkippedQuestion --> SkipReason
+CsvResultRow --> CsvQuestionStatus
+ExportEvent --> ExportEventType
+
+WritebackService --> ActivityResultReader
+WritebackService --> SheetsService
+WritebackService --> AnnotationCodec
+WritebackService --> WritebackRules
+WritebackService ..> WritebackPreview : 產生
+WritebackService ..> WritebackOutcome : 回傳
+WritebackService ..> OverwriteMode
+WritebackService ..> ExportEvent : 記錄
+CsvExportService --> ActivityResultReader
+CsvExportService --> CsvEncoder
+CsvExportService ..> CsvResultRow
+CsvExportService ..> ExportEvent : 記錄
+@enduml

@@ -50,6 +50,22 @@ describe('路由守衛（US2、contracts/ui-routes.md）', () => {
     expect(await screen.findByText('此頁僅限學生使用')).toBeInTheDocument();
   });
 
+  it('學生造訪 /teacher/questions 顯示「此功能僅限老師使用」（003 FR-031）', async () => {
+    mockMe(studentUser);
+    renderApp('/teacher/questions');
+    expect(await screen.findByText('此功能僅限老師使用')).toBeInTheDocument();
+  });
+
+  it('老師管理頁有「題目管理」按鈕可前往 /teacher/questions（003 FR-033）', async () => {
+    mockMe(teacherUser);
+    vi.spyOn(api, 'getGoogleStatus').mockResolvedValue({ configured: true, connected: false });
+    vi.spyOn(api, 'getCurrentDraft').mockResolvedValue({ draft: null });
+    vi.spyOn(api, 'getQuestionSet').mockResolvedValue({ questionSet: null });
+    renderApp('/teacher');
+    await userEvent.setup().click(await screen.findByRole('link', { name: '題目管理' }));
+    expect(await screen.findByRole('heading', { name: '題目管理' })).toBeInTheDocument();
+  });
+
   it('已登入造訪 / 依角色導向', async () => {
     mockMe(teacherUser);
     renderApp('/');

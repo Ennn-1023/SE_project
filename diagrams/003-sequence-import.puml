@@ -1,0 +1,139 @@
+@startuml 003-sequence-import
+title 時序圖：讀取學習單 → 互動標註 → 預覽 → 確認匯入
+
+skinparam backgroundColor #FAF7F0
+skinparam shadowing false
+autonumber
+
+actor "老師" as T
+participant "SheetLinkForm" as LF
+participant "SheetGrid /\nAnnotationPanel" as UI
+participant "AnnotationRules\n(shared)" as AR
+participant "ApiClient" as API
+participant "QuestionImportRoutes" as R
+participant "QuestionImportService" as IS
+participant "SheetsService" as SS
+participant "GoogleAuthService" as GA
+participant "SheetsGateway" as GW
+participant "AnnotationCodec" as AC
+participant "ImportDraftRepository" as DR
+participant "QuestionSetRepository" as QR
+participant "QuestionEventRepository" as ER
+participant "Google Sheets" as G
+
+== 讀取學習單 ==
+T -> LF : 貼上連結，按「讀取學習單」
+LF -> AR : parseSheetLink(link)
+alt 不是 Google 試算表連結
+  AR --> LF : 錯誤（不送出）
+else 格式正確
+  LF -> API : createDraft(link, sheetId?)
+  API -> R : POST /question-import/drafts
+  note right of R : RequireAuth → RequireRole(TEACHER) → Validate(link ≤ 2000)
+  R -> IS : createDraft(userId, link, sheetId?)
+  IS -> AR : parseSheetLink(link)
+  IS -> SS : readSheet(userId, spreadsheetId, sheetId ?? gid)
+  SS -> GA : getAccessToken(userId)
+  note right of GA : 未連結 → GOOGLE_NOT_CONNECTED\n更新失敗 → GOOGLE_AUTH_EXPIRED
+  GA --> SS : accessToken
+  SS -> GW : getSpreadsheet(token, id)
+  note right of SS : 任一呼叫回 401 時：getAccessToken(userId, 強制更新) 後重試一次
+  GW -> G : GET spreadsheets/{id}（fields: 標題、分頁）
+  G --> GW : 200 / 403 / 404 / 429 / 逾時
+  alt 錯誤
+    GW --> SS : SHEET_FORBIDDEN / SHEET_NOT_FOUND / GOOGLE_*
+    SS --> IS : AppError
+    IS --> R : AppError
+    R --> API : 錯誤回應
+    API --> LF : 顯示原因與修正方式
+  else 成功
+    SS -> GW : getUsedRange(token, id, 分頁)
+    note right of SS : 分頁不存在 → SHEET_TAB_NOT_FOUND\n空白 → SHEET_EMPTY\n> 500 列或 52 欄 → SHEET_TOO_LARGE
+    SS -> GW : getGrid(token, id, 分頁, 使用範圍＋2 列 2 欄可點選的空白邊界)
+    SS -> GW : searchMetadata(token, id, sheetId)
+    GW --> SS : GridSnapshot、MetadataEntry[]
+    SS --> IS : SheetData
+    IS -> AC : decode(entries, snapshot)
+    AC --> IS : 帶回的 AnnotationDocument、warnings
+    IS -> AR : validateAnnotations(doc, snapshot)
+    IS -> AC : fingerprint(entries)
+    IS -> DR : create(draft)（舊 OPEN 草稿 → CANCELLED）
+    IS --> R : ImportDraft
+    R --> API : 201 { draft }
+    API --> UI : 顯示格子（與已帶回的標註）
+  end
+end
+
+== 互動標註（重複） ==
+loop 每一題／每個小題
+  T -> UI : 新增題目（或設為題組）→ 點題目格 → 點作答格
+  UI -> AR : validateAnnotations(doc, snapshot)
+  AR --> UI : issues / warnings（即時標示）
+  UI -> API : saveAnnotations(draftId, revision, doc)（800 ms 防抖）
+  API -> R : PUT /drafts/{id}/annotations
+  R -> IS : saveAnnotations(userId, draftId, revision, doc)
+  IS -> DR : findById(draftId)
+  note right of IS : 過期 → DRAFT_EXPIRED\nrevision 不符 → DRAFT_REVISION_CONFLICT
+  IS -> AR : autoNumber(doc)、validateAnnotations(doc, snapshot)
+  IS -> DR : updateAnnotations(id, revision + 1, doc, now + 30 分鐘)
+  R --> API : 200 { revision, annotations, validation }
+end
+
+== 預覽 ==
+T -> UI : 按「預覽匯入」
+UI -> API : preview(draftId)
+API -> R : POST /drafts/{id}/preview
+R -> IS : preview(userId, draftId)
+IS -> AR : validateAnnotations(doc, snapshot, 完整性檢查)
+alt 有未完成或不合規
+  IS --> R : AppError(422 ANNOTATION_INVALID, issues ≤ 50)
+  R --> API : 422
+  API --> UI : 列出所有問題（不進入預覽）
+else 完整
+  IS -> QR : findCurrent()
+  IS --> R : preview、replaces
+  R --> API : 200
+  API --> T : 顯示預覽（與「將取代目前題目集」提示）
+end
+
+== 確認匯入 ==
+T -> UI : 按「確認匯入」
+UI -> API : confirm(draftId)
+API -> R : POST /drafts/{id}/confirm
+R -> IS : confirm(userId, draftId)
+IS -> DR : findById(draftId)
+alt 草稿已 CONFIRMED（重複送出）
+  IS -> QR : findCurrent()
+  IS --> R : 既有結果（冪等）
+else OPEN
+  IS -> AR : validateAnnotations(完整性檢查)
+  IS -> SS : readSheet(userId, spreadsheetId, sheetId)
+  SS --> IS : 最新 SheetData
+  IS -> AC : fingerprint(最新 entries)
+  alt 使用範圍／合併／標註格文字／metadata 有變
+    IS --> R : AppError(409 SHEET_CHANGED)
+    R --> API : 409「學習單在標註期間被修改，請重新讀取」
+  else 未變更
+    IS -> AC : encode(doc, snapshot, sheetId)
+    AC --> IS : MetadataEntry[]
+    IS -> SS : replaceAnnotations(userId, spreadsheetId, sheetId, entries)
+    SS -> GW : batchUpdate(delete 舊 qimport.* + create 新)
+    GW -> G : POST spreadsheets/{id}:batchUpdate
+    alt 403 或其他失敗
+      G --> GW : 錯誤
+      SS --> IS : SHEET_NO_EDIT_PERMISSION / GOOGLE_*
+      IS --> R : AppError（題目集不變）
+    else 成功
+      G --> GW : 200
+      group DB 交易
+        IS -> QR : replace(questionSet, questions)
+        IS -> DR : markConfirmed(draftId)
+        IS -> ER : record(IMPORTED)
+      end
+      IS --> R : QuestionSetView
+      R --> API : 200 { questionSet }
+      API --> T : 顯示「已匯入 N 題」與目前題目集
+    end
+  end
+end
+@enduml

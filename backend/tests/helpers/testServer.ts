@@ -4,7 +4,17 @@ import type { StudentView } from '@buzzer/shared';
 import { Config } from '../../src/config/env';
 import { openDb, type Db } from '../../src/data/db';
 import { startServer, type RunningServer } from '../../src/server';
+import { createMockActivity } from '../../src/data/mock/seed';
 import { fastHasher } from './testApp';
+import type { FakeGoogle } from './fakeGoogle';
+
+/** 測試用虛構的 Google 設定（不是任何真實憑證；005 寫回整合測試用）。 */
+export const TEST_GOOGLE_ENV = {
+  GOOGLE_CLIENT_ID: 'fake-client.apps.googleusercontent.com',
+  GOOGLE_CLIENT_SECRET: 'fake-google-client-secret',
+  GOOGLE_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 5).toString('base64'),
+  GOOGLE_OAUTH_REDIRECT_URI: 'http://localhost:5173/api/google/oauth/callback',
+};
 
 /** 測試用虛構設定值（不是任何真實密碼）。 */
 export const TEST_ENV = {
@@ -92,14 +102,21 @@ async function seedAccounts(server: RunningServer): Promise<void> {
 /** 在隨機 port 啟動完整伺服器（預設 :memory: DB），供整合測試使用 */
 export async function startTestServer(
   env: Record<string, string> = {},
-  opts: { db?: Db } = {},
+  opts: {
+    db?: Db;
+    /** 以 mock 題目開始活動（預設 true；004 起不再於啟動時自動 seed） */
+    mockActivity?: boolean;
+    /** 注入 FakeGoogle 並啟用 Google 設定（005） */
+    google?: FakeGoogle;
+  } = {},
 ): Promise<TestServer> {
-  const config = Config.load({ ...TEST_ENV, ...env });
+  const config = Config.load({ ...TEST_ENV, ...(opts.google ? TEST_GOOGLE_ENV : {}), ...env });
   // :memory: 由測試持有；實體檔案（重啟測試）則交給伺服器開關，模擬真正的重啟
   const ownDb = opts.db ?? (config.databasePath === ':memory:' ? openDb(':memory:') : undefined);
   // 預設 PORT=0（隨機）；重連測試可指定固定 port，模擬伺服器在同一位址恢復
   const server = await startServer(config, {
     ...(ownDb ? { db: ownDb } : {}),
+    ...(opts.google ? { google: { oauth: opts.google, sheets: opts.google } } : {}),
     hasher: fastHasher(),
   });
   await seedAccounts(server);
@@ -116,6 +133,10 @@ export async function startTestServer(
       .post(`/api/dev/teacher${path}`)
       .set('Cookie', teacherCookie)
       .send(body ?? {});
+  // 004 起啟動時不再自動 seed：資料庫中沒有任何活動時以 mock 題目開始一場（重啟測試第二次啟動時保留原活動）
+  if (opts.mockActivity !== false && !server.ctx.repo.getCurrentActivity()) {
+    server.ctx.machine.start(createMockActivity(server.ctx.repo));
+  }
 
   return {
     server,
@@ -177,7 +198,7 @@ export async function startTestServer(
         post('/open', seconds === undefined ? { questionId } : { questionId, seconds }),
       timeUp: () => post('/time-up'),
       close: () => post('/close'),
-      next: () => post('/next'),
+      next: () => post('/back-to-waiting'),
       end: () => post('/end'),
       reset: () => post('/reset'),
     },

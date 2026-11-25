@@ -10,6 +10,7 @@ import {
 import type { Clock } from '../lib/clock.js';
 import { AppError, ErrorCodes } from '../lib/errors.js';
 import { studentNotFound } from './accountService.js';
+import type { ActivityLockGuard } from './activityLockGuard.js';
 
 export const rangeError = (field: string, groupCount: number) =>
   new AppError(
@@ -29,6 +30,8 @@ export class GroupService {
     private readonly settings: GroupSettingsRepository,
     private readonly clock: Clock,
     private readonly runInTransaction: <T>(fn: () => T) => T,
+    /** 004：作答中禁止變更組別（FR-006） */
+    private readonly lock?: ActivityLockGuard,
   ) {}
 
   getSettings(): GroupSettings {
@@ -42,6 +45,7 @@ export class GroupService {
 
   /** 學生自選（僅限未分配，FR-034、FR-035）：以條件式更新避免與老師指派競態。 */
   selfSelect(studentId: string, groupNumber: number): Student {
+    this.lock?.assertGroupChangeAllowed();
     const { groupCount } = this.settings.get();
     if (groupCount === 0) {
       throw new AppError(ErrorCodes.GROUPS_NOT_OPEN, '老師尚未開放分組', {
@@ -63,6 +67,7 @@ export class GroupService {
 
   /** 老師設定組數（FR-031、FR-032）：在交易內檢查被移除的組別是否仍有成員。 */
   setGroupCount(n: number): GroupSettings {
+    this.lock?.assertGroupChangeAllowed();
     return this.runInTransaction(() => {
       const blocking = this.users.findStudentsInGroupsAbove(n);
       if (blocking.length > 0) {
@@ -97,6 +102,7 @@ export class GroupService {
 
   /** 老師指派學生到 1..N 或改回未分配（null）（FR-036）。 */
   assign(studentId: string, groupNumber: number | null): Student {
+    this.lock?.assertGroupChangeAllowed();
     const student = this.requireStudent(studentId);
     if (groupNumber !== null) {
       const { groupCount } = this.settings.get();

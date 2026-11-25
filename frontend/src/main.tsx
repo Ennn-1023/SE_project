@@ -6,9 +6,11 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Button } from './components/Button';
 import { ErrorMessage } from './components/ErrorMessage';
 import { Layout } from './components/Layout';
+import { ActivityControlPage } from './pages/ActivityControlPage';
 import { ChangePasswordForm } from './pages/ChangePasswordForm';
 import { DevTeacherPanel } from './pages/DevTeacherPanel';
 import { homePathFor, LoginPage } from './pages/LoginPage';
+import { QuestionManagePage } from './pages/QuestionManagePage';
 import { StudentHome } from './pages/StudentHome';
 import { StudentPage } from './pages/StudentPage';
 import { TeacherDashboard } from './pages/TeacherDashboard';
@@ -82,6 +84,22 @@ export function AppRoutes() {
         element={
           <Guard role="TEACHER">
             <TeacherDashboard />
+          </Guard>
+        }
+      />
+      <Route
+        path="/teacher/activity"
+        element={
+          <Guard role="TEACHER">
+            <ActivityControlPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/teacher/questions"
+        element={
+          <Guard role="TEACHER">
+            <QuestionManagePage />
           </Guard>
         }
       />

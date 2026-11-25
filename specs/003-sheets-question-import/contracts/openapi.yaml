@@ -1,0 +1,459 @@
+openapi: 3.1.0
+info:
+  title: 課程搶答系統 API — F3/F4（Google 試算表串接、學習單題目匯入）
+  version: 0.1.0
+  description: |
+    所有路徑皆位於 `/api` 之下，沿用 001 的 `sid` cookie、`application/json` 與 `ErrorResponse` 格式
+    （specs/001-foundation-auth-groups/contracts/openapi.yaml）。
+    除 `/google/oauth/callback` 外，所有端點皆須老師身分：未登入回 401 `UNAUTHENTICATED`，
+    學生回 403 `FORBIDDEN`「權限不足」（FR-031）。
+    共用型別（GridSnapshot、AnnotationDocument、Issue、QuestionSetView）定義見 ../data-model.md §2。
+servers:
+  - url: /api
+
+tags:
+  - name: google
+  - name: question-import
+  - name: question-set
+
+security:
+  - sessionCookie: []
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: sid
+
+  schemas:
+    ErrorResponse:
+      description: |
+        與 001 相同結構。本功能新增的錯誤碼（括號內為 HTTP 狀態）：
+        GOOGLE_NOT_CONFIGURED(503)、GOOGLE_NOT_CONNECTED(409)、GOOGLE_AUTH_EXPIRED(409)、
+        GOOGLE_RATE_LIMITED(503)、GOOGLE_UNAVAILABLE(503)、
+        SHEET_LINK_INVALID(400)、SHEET_NOT_FOUND(404)、SHEET_FORBIDDEN(403)、SHEET_NO_EDIT_PERMISSION(403)、
+        SHEET_TAB_NOT_FOUND(404, details.sheets)、SHEET_EMPTY(422)、SHEET_TOO_LARGE(422, details.rowCount/columnCount)、
+        SHEET_CHANGED(409)、SHEET_NOT_NATIVE(422)、ANNOTATION_INVALID(422, details.issues/totalIssues)、
+        DRAFT_EXPIRED(410)、DRAFT_REVISION_CONFLICT(409, details.revision)。
+        GOOGLE_AUTH_EXPIRED 不使用 401，避免前端誤判為系統登入失效。
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            hint: { type: string }
+            details: { type: object }
+
+    GoogleStatus:
+      type: object
+      required: [configured, connected]
+      properties:
+        configured: { type: boolean, description: 系統是否已設定 Google 串接憑證 }
+        connected: { type: boolean }
+        googleEmail: { type: string, description: 已連結時才有 }
+
+    SheetTab:
+      type: object
+      required: [sheetId, title]
+      properties:
+        sheetId: { type: integer, minimum: 0 }
+        title: { type: string }
+
+    Issue:
+      type: object
+      required: [code, message, hint]
+      properties:
+        code: { type: string, description: 見 data-model.md §2.3 IssueCode }
+        questionKey: { type: string }
+        partIndex: { type: integer }
+        cell: { type: string, example: G5 }
+        message: { type: string }
+        hint: { type: string }
+
+    CellRef:
+      type: [string, 'null']
+      pattern: '^[A-Z]{1,2}[1-9][0-9]{0,2}$'
+
+    AnnotationDocument:
+      type: object
+      required: [questions]
+      properties:
+        questions:
+          type: array
+          maxItems: 200
+          items:
+            type: object
+            required: [key, label, labelManual, kind, stemCell, parts]
+            properties:
+              key: { type: string, pattern: '^[A-Za-z0-9]{4,12}$' }
+              label: { type: string, maxLength: 40, description: 去頭尾空白後須為 1–20 字元 }
+              labelManual: { type: boolean }
+              kind: { enum: [SINGLE, GROUP] }
+              stemCell: { $ref: '#/components/schemas/CellRef' }
+              parts:
+                type: array
+                maxItems: 10
+                items:
+                  type: object
+                  required: [questionCell, answerCell]
+                  properties:
+                    questionCell: { $ref: '#/components/schemas/CellRef' }
+                    answerCell: { $ref: '#/components/schemas/CellRef' }
+
+    GridSnapshot:
+      type: object
+      required: [rowCount, columnCount, cells, merges, hiddenRows, hiddenColumns]
+      properties:
+        rowCount: { type: integer, minimum: 1, maximum: 500 }
+        columnCount: { type: integer, minimum: 1, maximum: 52 }
+        cells:
+          type: array
+          items:
+            type: object
+            required: [ref, text, error]
+            properties:
+              ref: { type: string }
+              text: { type: string }
+              error: { type: boolean }
+        merges:
+          type: array
+          items:
+            type: object
+            required: [start, end]
+            properties:
+              start: { type: string }
+              end: { type: string }
+        hiddenRows: { type: array, items: { type: integer } }
+        hiddenColumns: { type: array, items: { type: integer } }
+
+    Draft:
+      type: object
+      required: [id, revision, expiresAt, source, sheets, grid, annotations, restoredCount, validation]
+      properties:
+        id: { type: string, format: uuid }
+        revision: { type: integer }
+        expiresAt: { type: string, format: date-time }
+        source:
+          type: object
+          required: [spreadsheetId, spreadsheetTitle, sheetId, sheetTitle, sourceUrl]
+          properties:
+            spreadsheetId: { type: string }
+            spreadsheetTitle: { type: string }
+            sheetId: { type: integer }
+            sheetTitle: { type: string }
+            sourceUrl: { type: string }
+        sheets: { type: array, items: { $ref: '#/components/schemas/SheetTab' } }
+        grid: { $ref: '#/components/schemas/GridSnapshot' }
+        annotations: { $ref: '#/components/schemas/AnnotationDocument' }
+        restoredCount: { type: integer, description: 自試算表帶回的題數；0 表示沒有舊標註 }
+        validation: { $ref: '#/components/schemas/ValidationResult' }
+
+    ValidationResult:
+      type: object
+      required: [issues, warnings, totalIssues]
+      properties:
+        issues: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/Issue' } }
+        warnings: { type: array, items: { $ref: '#/components/schemas/Issue' } }
+        totalIssues: { type: integer }
+
+    QuestionSetView:
+      type: object
+      required: [source, questionCount, slotCount, questions]
+      properties:
+        source: { $ref: '#/components/schemas/Draft/properties/source' }
+        questionCount: { type: integer }
+        slotCount: { type: integer }
+        importedAt: { type: string, format: date-time }
+        questions:
+          type: array
+          items:
+            type: object
+            required: [label, kind, stem, parts]
+            properties:
+              label: { type: string }
+              kind: { enum: [SINGLE, GROUP] }
+              stem:
+                type: [object, 'null']
+                properties:
+                  text: { type: string }
+                  cell: { type: string, example: 學習單!C10 }
+              parts:
+                type: array
+                items:
+                  type: object
+                  required: [partLabel, text, questionCell, answerCell, answerHasContent]
+                  properties:
+                    partLabel: { type: [string, 'null'], example: （1） }
+                    text: { type: string }
+                    questionCell: { type: string, example: 學習單!C5 }
+                    answerCell: { type: string, example: 學習單!H5 }
+                    answerHasContent: { type: boolean }
+        warnings: { type: array, items: { $ref: '#/components/schemas/Issue' } }
+
+  responses:
+    Error:
+      description: 錯誤（見 ErrorResponse 錯誤碼）
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+paths:
+  /google/status:
+    get:
+      tags: [google]
+      summary: Google 串接設定與連結狀態（FR-002）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GoogleStatus' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /google/oauth/start:
+    post:
+      tags: [google]
+      summary: 開始連結 Google 帳號，回傳 Google 授權頁網址（FR-001）
+      description: 建立 oauth_states（10 分鐘）。前端收到後以 `window.location.assign(authUrl)` 前往。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authUrl]
+                properties:
+                  authUrl: { type: string, format: uri }
+        '503': { $ref: '#/components/responses/Error' }
+
+  /google/oauth/callback:
+    get:
+      tags: [google]
+      summary: Google 授權回呼（瀏覽器導向，非 JSON）
+      security: []
+      parameters:
+        - { name: state, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: code, in: query, schema: { type: string, maxLength: 2000 } }
+        - { name: error, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: scope, in: query, schema: { type: string, maxLength: 2000 } }
+      responses:
+        '302':
+          description: |
+            一律導回 `/teacher/questions?google=<result>`，result 為
+            `connected`、`denied`（老師取消）、`scope_missing`（未同意試算表權限）、
+            `state_invalid`（state 不存在／過期／session 不符／未登入）、`error`（交換 token 失敗）。
+            不帶任何 token 或 Google 錯誤原文。
+
+  /google/connection:
+    delete:
+      tags: [google]
+      summary: 中斷 Google 連結（盡可能撤銷授權，刪除保存的 token；題目集保留）
+      responses:
+        '204': { description: 已中斷（未連結時亦回 204） }
+        default: { $ref: '#/components/responses/Error' }
+
+  /question-import/drafts:
+    post:
+      tags: [question-import]
+      summary: 讀取學習單並建立標註草稿（US1、FR-005、FR-008、FR-011、FR-024）
+      description: |
+        讀取分頁清單、使用範圍、格子與本系統的標註；有舊標註時自動帶回。
+        建立新草稿時，該老師既有的 OPEN 草稿改為 CANCELLED。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [link]
+              additionalProperties: false
+              properties:
+                link: { type: string, minLength: 1, maxLength: 2000 }
+                sheetId: { type: integer, minimum: 0, description: 指定分頁；優先於連結中的 gid }
+      responses:
+        '201':
+          description: 已建立草稿
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [draft]
+                properties:
+                  draft: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+
+  /question-import/drafts/current:
+    get:
+      tags: [question-import]
+      summary: 取得目前未過期的草稿（FR-021 續作）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [draft]
+                properties:
+                  draft:
+                    oneOf:
+                      - { $ref: '#/components/schemas/Draft' }
+                      - { type: 'null' }
+
+  /question-import/drafts/{draftId}/annotations:
+    put:
+      tags: [question-import]
+      summary: 儲存整份標註文件（前端防抖自動儲存；FR-013～FR-019）
+      description: |
+        伺服器正規化合併格、重新計算自動題號並驗證。`issues` 中屬於「完整性」的項目
+        （MISSING_*、GROUP_WITHOUT_PARTS、NO_QUESTIONS）在此端點不回報，只在 preview／confirm 回報。
+        結構性錯誤（例如同一格兩個角色）仍會儲存草稿並回報，以免老師的進度遺失。
+        超過 200 題或 10 小題、格式不合 schema 則回 400 且不儲存。
+      parameters:
+        - { name: draftId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [revision, annotations]
+              additionalProperties: false
+              properties:
+                revision: { type: integer, minimum: 0, description: 目前持有的 revision }
+                annotations: { $ref: '#/components/schemas/AnnotationDocument' }
+      responses:
+        '200':
+          description: 已儲存
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revision, annotations, validation, expiresAt]
+                properties:
+                  revision: { type: integer }
+                  annotations: { $ref: '#/components/schemas/AnnotationDocument' }
+                  validation: { $ref: '#/components/schemas/ValidationResult' }
+                  expiresAt: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+
+  /question-import/drafts/{draftId}/preview:
+    post:
+      tags: [question-import]
+      summary: 預覽匯入（FR-020、FR-026、FR-027）
+      parameters:
+        - { name: draftId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 可匯入
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [preview, replaces]
+                properties:
+                  preview: { $ref: '#/components/schemas/QuestionSetView' }
+                  replaces:
+                    description: 目前題目集（確認後將被取代）；沒有則為 null
+                    type: [object, 'null']
+                    properties:
+                      spreadsheetTitle: { type: string }
+                      sheetTitle: { type: string }
+                      questionCount: { type: integer }
+        '410': { $ref: '#/components/responses/Error' }
+        '422':
+          description: ANNOTATION_INVALID，details.issues 列出所有未完成或不合規項目（≤ 50）與 totalIssues
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /question-import/drafts/{draftId}/confirm:
+    post:
+      tags: [question-import]
+      summary: 確認匯入（FR-023、FR-025、FR-027、FR-030）
+      description: |
+        依序：驗證完整性 → 重新讀取學習單比對（R4，不同則 SHEET_CHANGED）→ 以單一 batchUpdate
+        取代試算表上的標註（失敗則整次失敗）→ 同一 DB 交易內取代題目集、草稿改為 CONFIRMED、寫入事件。
+        對已 CONFIRMED 的草稿再次呼叫，直接回傳該次匯入的結果（200）。
+      parameters:
+        - { name: draftId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: 已匯入
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [questionSet]
+                properties:
+                  questionSet: { $ref: '#/components/schemas/QuestionSetView' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+
+  /question-import/drafts/{draftId}:
+    delete:
+      tags: [question-import]
+      summary: 取消草稿（不保存、不寫入試算表）
+      parameters:
+        - { name: draftId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: 已取消 }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /question-set:
+    get:
+      tags: [question-set]
+      summary: 目前題目集（FR-029）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [questionSet]
+                properties:
+                  questionSet:
+                    oneOf:
+                      - { $ref: '#/components/schemas/QuestionSetView' }
+                      - { type: 'null' }
+    delete:
+      tags: [question-set]
+      summary: 清除題目集（試算表上的標註保留；US5）
+      responses:
+        '204': { description: 已清除（沒有題目集時亦回 204） }
+
+  /question-set/reimport:
+    post:
+      tags: [question-set]
+      summary: 重新讀取目前題目集的來源並建立草稿（帶回標註；US4）
+      responses:
+        '201':
+          description: 已建立草稿（同 POST /question-import/drafts）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [draft]
+                properties:
+                  draft: { $ref: '#/components/schemas/Draft' }
+        '404': { description: NOT_FOUND「目前沒有題目集可重新匯入」 }
+        default: { $ref: '#/components/responses/Error' }

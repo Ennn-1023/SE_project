@@ -50,3 +50,25 @@ export function authenticateCookie(
     return null;
   }
 }
+
+/**
+ * /teacher namespace 握手驗證（004 contracts/socket-events.md）：session 有效且角色為老師。
+ * 回傳 'UNAUTHORIZED'（未登入或已失效）、'FORBIDDEN'（非老師）或老師的 users.id。
+ */
+export function authenticateTeacherCookie(
+  cookieHeader: string | undefined,
+  deps: Omit<SocketAuthDeps, 'repo'>,
+): number | 'UNAUTHORIZED' | 'FORBIDDEN' {
+  const token = cookieValue(cookieHeader, SESSION_COOKIE);
+  if (!token) return 'UNAUTHORIZED';
+  try {
+    const session = deps.sessions.validate(token);
+    const user = deps.users.findById(session.userId);
+    if (!user) return 'UNAUTHORIZED';
+    if (user.role !== 'TEACHER') return 'FORBIDDEN';
+    deps.sessions.touch(token);
+    return user.id;
+  } catch {
+    return 'UNAUTHORIZED';
+  }
+}

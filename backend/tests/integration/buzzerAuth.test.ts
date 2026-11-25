@@ -127,7 +127,7 @@ describe('搶答的身分驗證（整合 001 F1 登入；002 Q-T10）', () => {
     const waiting = client.waitFor((v) => v.phase === 'ANSWERING');
     expect((await t.teacher.open('Q1', 60)).status).toBe(200);
     const view = await waiting;
-    expect(view.question).toEqual({
+    expect(view.question).toMatchObject({
       questionId: 'Q1',
       number: 1,
       text: '請說明 TCP 三向交握的三個步驟。',

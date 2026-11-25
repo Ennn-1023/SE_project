@@ -24,6 +24,16 @@ export interface Config {
   clientOrigin: string;
   /** 是否掛載模擬老師搶答操作的開發工具（002 FR-022～FR-024） */
   enableDevTools: boolean;
+  /** Google 試算表串接（003 research R10）；三個必要變數全空時為 null */
+  google: GoogleConfig | null;
+}
+
+export interface GoogleConfig {
+  clientId: string;
+  clientSecret: string;
+  /** AES-256-GCM 金鑰（32 bytes） */
+  encryptionKey: Buffer;
+  redirectUri: string;
 }
 
 /** 設定缺漏或格式錯誤。訊息只列變數名稱與規則，不含任何設定值（FR-001）。 */
@@ -85,7 +95,39 @@ const envSchema = z.object({
   ENABLE_DEV_TOOLS: optional(
     z.enum(['true', 'false'], { error: '須為 true 或 false' }).default('false'),
   ),
+  GOOGLE_CLIENT_ID: optional(
+    z
+      .string()
+      .max(200, '長度不可超過 200 字元')
+      .regex(
+        /^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com$/,
+        '須以 .apps.googleusercontent.com 結尾',
+      )
+      .optional(),
+  ),
+  GOOGLE_CLIENT_SECRET: optional(z.string().max(200, '長度不可超過 200 字元').optional()),
+  GOOGLE_TOKEN_ENCRYPTION_KEY: optional(
+    z
+      .string()
+      .refine(
+        (v) => /^[A-Za-z0-9+/]+={0,2}$/.test(v) && Buffer.from(v, 'base64').length === 32,
+        '須為 base64 編碼、解碼後恰好 32 bytes',
+      )
+      .optional(),
+  ),
+  GOOGLE_OAUTH_REDIRECT_URI: optional(
+    z
+      .string()
+      .regex(/^https?:\/\/\S+$/, '須為 http:// 或 https:// 開頭的完整網址')
+      .optional(),
+  ),
 });
+
+const GOOGLE_REQUIRED = [
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
+  'GOOGLE_TOKEN_ENCRYPTION_KEY',
+] as const;
 
 function load(env: Record<string, string | undefined>): Config {
   const parsed = envSchema.safeParse(env);
@@ -102,6 +144,27 @@ function load(env: Record<string, string | undefined>): Config {
   }
   const databasePath =
     e.DATABASE_PATH === ':memory:' ? ':memory:' : path.resolve(BACKEND_ROOT, e.DATABASE_PATH);
+  // Google 三個必要變數須全填或全空（research R10）
+  const filled = GOOGLE_REQUIRED.filter((k) => e[k] !== undefined);
+  if (filled.length > 0 && filled.length < GOOGLE_REQUIRED.length) {
+    throw new ConfigError(
+      GOOGLE_REQUIRED.filter((k) => e[k] === undefined).map((name) => ({
+        name,
+        rule: 'Google 串接的三個變數須全部填寫或全部留空',
+      })),
+    );
+  }
+  const google: GoogleConfig | null =
+    filled.length === GOOGLE_REQUIRED.length
+      ? {
+          clientId: e.GOOGLE_CLIENT_ID!,
+          clientSecret: e.GOOGLE_CLIENT_SECRET!,
+          encryptionKey: Buffer.from(e.GOOGLE_TOKEN_ENCRYPTION_KEY!, 'base64'),
+          redirectUri:
+            e.GOOGLE_OAUTH_REDIRECT_URI ??
+            `${e.CLIENT_ORIGIN.replace(/\/+$/, '')}/api/google/oauth/callback`,
+        }
+      : null;
   return {
     studentDefaultPassword: e.STUDENT_DEFAULT_PASSWORD,
     teacherAccount: e.TEACHER_ACCOUNT,
@@ -113,6 +176,7 @@ function load(env: Record<string, string | undefined>): Config {
     nodeEnv: e.NODE_ENV,
     clientOrigin: e.CLIENT_ORIGIN,
     enableDevTools: e.ENABLE_DEV_TOOLS === 'true',
+    google,
   };
 }
 

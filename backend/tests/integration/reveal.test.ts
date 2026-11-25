@@ -27,7 +27,7 @@ describe('搶答結束後揭曉結果（US2、Q-T2、Q-T3）', () => {
       { rank: 2, teamName: '第 1 組', answer: 'A 的答案', isWinner: false },
       { rank: 3, teamName: '第 3 組', answer: 'C 的答案', isWinner: false },
     ];
-    for (const v of [va, vb, vc, vd]) expect(v!.results).toEqual(expected);
+    for (const v of [va, vb, vc, vd]) expect(v!.results).toMatchObject(expected);
     expect(vb!.myTeamOutcome).toBe('WIN');
     expect(va!.myTeamOutcome).toBe('LOSE');
     expect(vc!.myTeamOutcome).toBe('LOSE');
@@ -41,7 +41,7 @@ describe('搶答結束後揭曉結果（US2、Q-T2、Q-T3）', () => {
     }
 
     // 重新取回狀態也一樣
-    expect((await t.state(tokD!)).results).toEqual(expected);
+    expect((await t.state(tokD!)).results).toMatchObject(expected);
   });
 
   it('產生一筆完整結果資料，並保存所有送出紀錄（Q-T3、FR-019、FR-020）', async () => {

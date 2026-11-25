@@ -67,10 +67,13 @@ describe('活動結束（US5）', () => {
     expect(view.results).toBeUndefined();
   });
 
-  it('ENDED 之後再結束回 409 ACTIVITY_ENDED', async () => {
+  it('ENDED 之後再結束為無變化（004 FR-014），其他操作仍回 409 ACTIVITY_ENDED', async () => {
     await t.teacher.end();
     const res = await t.teacher.end();
-    expect(res.status).toBe(409);
-    expect(res.body.error).toEqual(ENDED_ERROR);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ phase: 'ENDED' });
+    const open = await t.teacher.open('Q2', 60);
+    expect(open.status).toBe(409);
+    expect(open.body.error).toEqual(ENDED_ERROR);
   });
 });
