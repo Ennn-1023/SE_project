@@ -138,6 +138,37 @@ describe('QuestionManagePage：讀取學習單（US1）', () => {
     expect(screen.getByRole('listitem', { name: '第 1 題' })).toBeInTheDocument();
   });
 
+  it('多題草稿：格線顯示所有角標，但只有目前這一題標為 current；切題不觸發自動儲存（006 FR-021、FR-024）', async () => {
+    const q = (key: string, label: string, questionCell: string, answerCell: string) => ({
+      key,
+      label,
+      labelManual: false,
+      kind: 'SINGLE' as const,
+      stemCell: null,
+      parts: [{ questionCell, answerCell }],
+    });
+    vi.mocked(api.getCurrentDraft).mockResolvedValue({
+      draft: draftView({
+        revision: 3,
+        annotations: { questions: [q('qa01', '1', 'C5', 'G5'), q('qa02', '2', 'C7', 'G7')] },
+      }),
+    });
+    const save = vi.spyOn(api, 'saveAnnotations');
+    renderPage();
+    const c5 = await screen.findByRole('gridcell', { name: /^C5/ });
+    const c7 = screen.getByRole('gridcell', { name: /^C7/ });
+    expect(c5).toHaveTextContent('題1');
+    expect(c7).toHaveTextContent('題2');
+    expect(c5).toHaveAttribute('data-current', 'true');
+    expect(c7).not.toHaveAttribute('data-current');
+    await userEvent.setup().click(screen.getByRole('button', { name: '下一題' }));
+    expect(c7).toHaveAttribute('data-current', 'true');
+    expect(c5).not.toHaveAttribute('data-current');
+    // 逐題切換只改變呈現，不改標註資料，因此不會送出自動儲存
+    await new Promise((r) => setTimeout(r, 900));
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('未連結 Google 時讀取按鈕停用', async () => {
     vi.mocked(api.getGoogleStatus).mockResolvedValue({ configured: true, connected: false });
     renderPage();

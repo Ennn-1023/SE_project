@@ -19,6 +19,8 @@ export interface CellMark {
   /** 角標文字，例如「題1」「答1-2」「幹3」 */
   label: string;
   tone: MarkTone;
+  /** 006：屬於目前這一題時為 true，以較粗外框醒目顯示（FR-021） */
+  current?: boolean;
 }
 
 export interface SheetGridProps {
@@ -110,11 +112,12 @@ export function SheetGrid({ grid, onCellClick, marks = {}, selected = null }: Sh
           aria-selected={isSelected}
           data-hidden={hidden ? 'true' : 'false'}
           data-error={info?.error ? 'true' : 'false'}
+          data-current={mark?.current ? 'true' : undefined}
           onClick={() => onCellClick(ref)}
           title={info?.text || ref}
           className={`relative overflow-hidden border-b border-r border-cream-300 px-1 text-left leading-tight focus-visible:outline-2 focus-visible:outline-primary ${
             hidden ? 'opacity-40' : ''
-          } ${info?.error ? 'text-danger' : ''} ${mark ? TONE_CLASS[mark.tone] : 'bg-cream-50 hover:bg-cream-100'} ${
+          } ${info?.error ? 'text-danger' : ''} ${mark ? TONE_CLASS[mark.tone] : 'bg-cream-50 hover:bg-cream-100'} ${mark?.current ? 'z-[5] ring-4' : ''} ${
             isSelected ? 'outline-3 outline-primary' : ''
           }`}
           style={{
@@ -124,7 +127,9 @@ export function SheetGrid({ grid, onCellClick, marks = {}, selected = null }: Sh
         >
           {mark ? (
             <span
-              className={`absolute right-0.5 top-0.5 rounded px-1 text-[0.65rem] font-bold ${BADGE_CLASS[mark.tone]}`}
+              className={`absolute right-0.5 top-0.5 rounded px-1 text-[0.65rem] font-bold ${BADGE_CLASS[mark.tone]} ${
+                mark.current ? 'ring-2 ring-ink ring-offset-1' : ''
+              }`}
             >
               {mark.label}
             </span>

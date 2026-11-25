@@ -37,3 +37,13 @@ body {
     sans-serif;
   line-height: 1.5;
 }
+
+/* 006 側邊選單滑入；只在 motion-safe 時使用（contracts/ui-routes.md §2.2） */
+@keyframes side-menu-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}

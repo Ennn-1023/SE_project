@@ -12,7 +12,6 @@ skinparam package {
 }
 
 actor "學生\nStudent" as Student
-actor "老師（開發工具）\nTeacher in dev" as Dev
 
 package "frontend（React + Vite，RWD mobile-first）" {
   [StudentPage\n依 phase 切換畫面] as Page
@@ -28,7 +27,6 @@ package "frontend（React + Vite，RWD mobile-first）" {
   [api/client\nREST + 錯誤格式] as ApiClient
   [realtime/socket\n推播接收+自動重連] as RtClient
   [DesignTokens\n米白底/撞色按鈕] as Tokens
-  [DevTeacherPanel\n模擬老師操作（/dev，需老師登入）] as DevPanel
   [StudentHome（001）\n已分組 →「進入搶答」] as Home
   [LoginPage（001）\n學號＋密碼登入] as Login
 }
@@ -88,11 +86,8 @@ StateHook --> RtClient : 訂閱 state:update
 Input --> ApiClient : 送出答案
 Input ..> Rules
 RtClient ..> RtCfg
-Dev --> DevPanel
-DevPanel --> ApiClient
 
 ApiClient --> StudentApi : REST
-ApiClient --> DevTeacher : REST (dev)
 RtClient <--> Gateway : WebSocket／polling（session cookie）
 
 StudentApi --> Guard : 登入＋學生角色
@@ -127,4 +122,8 @@ Seed --> Repo : 寫入 mock 活動與題目
 
 Teacher ..> Store : 讀取
 Export ..> Store : 讀取
+note bottom of DevTeacher
+  006：前端開發工具（DevTeacherPanel、/dev 頁面）已移除；
+  後端 /api/dev 保留，僅供開發與整合測試使用
+end note
 @enduml

@@ -1,6 +1,6 @@
 /**
  * 設計圖與程式碼一致性驗證（憲章原則 VI、001 research R15／tasks T077、003 tasks T088）。
- * 解析 diagrams/001-*、003-*、004-*、005-* 的組件圖與類別圖，依各功能 plan.md「設計圖對照表」與
+ * 解析 diagrams/001-*、003-*、004-*、005-*、006-* 的組件圖與類別圖，依各功能 plan.md「設計圖對照表」與
  * 「基礎設施檔案允許清單」確認：
  *  1. 每個組件／類別在對照的檔案中存在並匯出同名符號；
  *  2. 服務、repository 介面、外部整合、PasswordHasher、Clock 的公開方法與類別圖完全一致
@@ -160,6 +160,11 @@ const set005 = loadDiagramSet(
   'specs/005-sheets-writeback-csv-export/plan.md',
   'diagrams/005-component.puml',
   'diagrams/005-class.puml',
+);
+const set006 = loadDiagramSet(
+  'specs/006-teacher-nav-annotation-paging/plan.md',
+  'diagrams/006-component.puml',
+  'diagrams/006-class.puml',
 );
 
 // ---------- TypeScript 原始碼解析 ----------
@@ -365,7 +370,16 @@ describeDiagramSet('005', set005, 22, [
   'WritebackRules',
 ]);
 
-describe('程式檔案 ↔ 設計圖對照表（001＋003＋004＋005）', () => {
+describeDiagramSet('006', set006, 17, [
+  'TeacherNavItem',
+  'TeacherLayoutProps',
+  'SideMenuProps',
+  'AnnotationEditor',
+  'QuestionOverviewItem',
+  'CellMark',
+]);
+
+describe('程式檔案 ↔ 設計圖對照表（001＋003＋004＋005＋006）', () => {
   it('routes／services／db／middleware／integrations 下沒有圖表與允許清單以外的檔案', () => {
     const mapped = new Set(
       [
@@ -373,6 +387,7 @@ describe('程式檔案 ↔ 設計圖對照表（001＋003＋004＋005）', () =>
         ...set003.componentMap.values(),
         ...set004.componentMap.values(),
         ...set005.componentMap.values(),
+        ...set006.componentMap.values(),
       ].flat(),
     );
     const allowed = [
@@ -380,6 +395,7 @@ describe('程式檔案 ↔ 設計圖對照表（001＋003＋004＋005）', () =>
       ...set003.allowPatterns,
       ...set004.allowPatterns,
       ...set005.allowPatterns,
+      ...set006.allowPatterns,
     ];
     const extra: string[] = [];
     for (const dir of ['routes', 'services', 'db', 'middleware', 'integrations/google']) {

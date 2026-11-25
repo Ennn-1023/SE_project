@@ -9,7 +9,7 @@ actor "老師" as Teacher
 actor "學生" as Student
 
 package "前端（瀏覽器，RWD）" as FE {
-  [老師管理頁\nTeacherDashboard] as TeacherPage
+  [學生管理頁\nStudentManagePage\n(006 由 TeacherDashboard 改名)] as TeacherPage
   [搶答活動頁\nActivityControlPage] as ActPage
   [開始活動面板\nActivityStartPanel] as StartPanel
   [題目清單\nActivityQuestionList] as QList
@@ -63,7 +63,7 @@ package "後端（伺服器）" as BE {
 database "資料庫" as DB
 
 Teacher --> TeacherPage
-TeacherPage --> ActPage : 搶答活動按鈕
+TeacherPage --> ActPage : 側邊選單（006）
 ActPage --> StartPanel
 ActPage --> QList
 ActPage --> OpenForm

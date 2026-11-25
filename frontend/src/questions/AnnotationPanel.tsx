@@ -15,6 +15,8 @@ import {
 } from '@buzzer/shared';
 import { Button } from '../components/Button';
 import { ErrorMessage } from '../components/ErrorMessage';
+import { QuestionOverview } from './QuestionOverview';
+import { QuestionPager } from './QuestionPager';
 import type { CellMark } from './SheetGrid';
 
 // ---------------------------------------------------------------------------
@@ -55,19 +57,20 @@ function ownerOf(
   doc: AnnotationDocument,
   cell: CellRef,
   except?: Target,
-): { title: string; role: TargetRole } | null {
+): { key: string; title: string; questionTitle: string; role: TargetRole } | null {
   for (const [qi, q] of doc.questions.entries()) {
+    const base = { key: q.key, questionTitle: titleOf(q, qi) };
     if (q.stemCell === cell && !(except?.key === q.key && except.role === 'stem')) {
-      return { title: titleOf(q, qi), role: 'stem' };
+      return { ...base, title: titleOf(q, qi), role: 'stem' };
     }
     for (const [pi, p] of q.parts.entries()) {
       const same = (role: TargetRole) =>
         except?.key === q.key && except.part === pi && except.role === role;
       if (p.questionCell === cell && !same('question')) {
-        return { title: titleOf(q, qi, pi), role: 'question' };
+        return { ...base, title: titleOf(q, qi, pi), role: 'question' };
       }
       if (p.answerCell === cell && !same('answer')) {
-        return { title: titleOf(q, qi, pi), role: 'answer' };
+        return { ...base, title: titleOf(q, qi, pi), role: 'answer' };
       }
     }
   }
@@ -81,6 +84,14 @@ export interface AnnotationEditor {
   selected: CellRef | null;
   message: string | null;
   stepText: string;
+  /** 006：目前這一題的 key；沒有題目時為 null（data-model §3） */
+  currentKey: string | null;
+  /** 006：目前這一題的位置（0 起算）；沒有題目時為 -1 */
+  currentIndex: number;
+  /** 006：切到指定題目；先取消進行中的步驟，key 不存在時不動作 */
+  goTo: (key: string) => void;
+  goPrev: () => void;
+  goNext: () => void;
   handleCellClick: (ref: CellRef) => void;
   addQuestion: () => void;
   setKind: (key: string, kind: QuestionKind) => void;
@@ -111,6 +122,28 @@ export function useAnnotationEditor({
   const [target, setTarget] = useState<Target | null>(null);
   const [selected, setSelected] = useState<CellRef | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [rawKey, setRawKey] = useState<string | null>(null);
+
+  // 目前這一題（006 data-model §3）：rawKey 不在 doc 中時（載入、替換、刪除後）回到第 1 題
+  const currentKey = doc.questions.some((q) => q.key === rawKey)
+    ? rawKey
+    : (doc.questions[0]?.key ?? null);
+  const currentIndex = doc.questions.findIndex((q) => q.key === currentKey);
+
+  const goTo = (key: string) => {
+    if (!doc.questions.some((q) => q.key === key)) return;
+    setTarget(null);
+    setMessage(null);
+    setRawKey(key);
+  };
+  const goPrev = () => {
+    const prev = doc.questions[currentIndex - 1];
+    if (currentIndex > 0 && prev) goTo(prev.key);
+  };
+  const goNext = () => {
+    const next = doc.questions[currentIndex + 1];
+    if (currentIndex >= 0 && next) goTo(next.key);
+  };
 
   const update = useCallback(
     (key: string, fn: (q: AnnotatedQuestion) => AnnotatedQuestion) =>
@@ -193,6 +226,7 @@ export function useAnnotationEditor({
       ],
     });
     setMessage(null);
+    setRawKey(key);
     setTarget({ key, role: 'question', part: 0 });
   };
 
@@ -246,6 +280,13 @@ export function useAnnotationEditor({
   };
 
   const removeQuestion = (key: string) => {
+    const i = doc.questions.findIndex((q) => q.key === key);
+    if (i < 0) return;
+    // 刪除目前這一題：顯示原本的後一題；刪的是最後一題則顯示新的最後一題（FR-017）
+    if (key === currentKey) {
+      const neighbor = doc.questions[i + 1] ?? doc.questions[i - 1];
+      setRawKey(neighbor?.key ?? null);
+    }
     onChange({ questions: doc.questions.filter((q) => q.key !== key) });
     if (target?.key === key) setTarget(null);
   };
@@ -257,6 +298,7 @@ export function useAnnotationEditor({
 
   const clearAll = () => {
     onChange({ questions: [] });
+    setRawKey(null);
     setTarget(null);
     setMessage(null);
   };
@@ -280,6 +322,11 @@ export function useAnnotationEditor({
     selected,
     message,
     stepText,
+    currentKey,
+    currentIndex,
+    goTo,
+    goPrev,
+    goNext,
     handleCellClick,
     addQuestion,
     setKind,
@@ -296,19 +343,52 @@ export function useAnnotationEditor({
   };
 }
 
-/** SheetGrid 的角標（題1、答1-2、幹3）。 */
-export function marksFor(doc: AnnotationDocument): Record<CellRef, CellMark> {
+/**
+ * SheetGrid 的角標（題1、答1-2、幹3）。所有題目都有角標；
+ * 006：currentKey 那一題的角標標上 current，SheetGrid 以外框醒目顯示（FR-021）。
+ */
+export function marksFor(
+  doc: AnnotationDocument,
+  currentKey: string | null = null,
+): Record<CellRef, CellMark> {
   const marks: Record<CellRef, CellMark> = {};
   doc.questions.forEach((q, qi) => {
     const label = q.label.trim() || String(qi + 1);
-    if (q.stemCell) marks[q.stemCell] = { label: `幹${label}`, tone: 'stem' };
+    const extra = q.key === currentKey ? { current: true } : {};
+    if (q.stemCell) marks[q.stemCell] = { label: `幹${label}`, tone: 'stem', ...extra };
     q.parts.forEach((p, pi) => {
       const suffix = q.kind === 'GROUP' ? `${label}-${pi + 1}` : label;
-      if (p.questionCell) marks[p.questionCell] = { label: `題${suffix}`, tone: 'question' };
-      if (p.answerCell) marks[p.answerCell] = { label: `答${suffix}`, tone: 'answer' };
+      if (p.questionCell) {
+        marks[p.questionCell] = { label: `題${suffix}`, tone: 'question', ...extra };
+      }
+      if (p.answerCell) marks[p.answerCell] = { label: `答${suffix}`, tone: 'answer', ...extra };
     });
   });
   return marks;
+}
+
+/** 題目總覽的一個項目（006 data-model §4）。 */
+export interface QuestionOverviewItem {
+  key: string;
+  title: string;
+  /** 有會擋下匯入的錯誤（validation.issues）時為 true；只有提醒（warnings）不算 */
+  hasIssue: boolean;
+  current: boolean;
+}
+
+/** 題目總覽（006 FR-022、research R7）。 */
+export function overviewOf(
+  doc: AnnotationDocument,
+  validation: ValidationResult,
+  currentKey: string | null,
+): QuestionOverviewItem[] {
+  const withIssue = new Set(validation.issues.map((i) => i.questionKey).filter(Boolean));
+  return doc.questions.map((q, qi) => ({
+    key: q.key,
+    title: titleOf(q, qi),
+    hasIssue: withIssue.has(q.key),
+    current: q.key === currentKey,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +422,7 @@ const cellText = (grid: GridSnapshot, ref: CellRef) => {
   return t.length > 40 ? `${t.slice(0, 40)}…` : t;
 };
 
-/** AnnotationPanel（組件圖 003-component）：題目清單、目前步驟、選取格資訊與標註操作。 */
+/** AnnotationPanel（組件圖 003-component、006）：逐題切換、目前步驟、選取格資訊與目前這一題的標註操作。 */
 export function AnnotationPanel({ doc, grid, validation, editor }: AnnotationPanelProps) {
   const general = validation.issues.filter((i) => !i.questionKey);
   const selectedOwner = editor.selected ? ownerOf(doc, editor.selected) : null;
@@ -376,6 +456,18 @@ export function AnnotationPanel({ doc, grid, validation, editor }: AnnotationPan
         </div>
       </div>
 
+      <QuestionOverview
+        items={overviewOf(doc, validation, editor.currentKey)}
+        onSelect={editor.goTo}
+      />
+
+      <QuestionPager
+        index={editor.currentIndex}
+        total={doc.questions.length}
+        onPrev={editor.goPrev}
+        onNext={editor.goNext}
+      />
+
       <div className="flex flex-wrap items-center gap-2 rounded-md bg-cream-50 px-3 py-2">
         <p data-testid="annotation-step" aria-live="polite" className="font-medium text-primary">
           {editor.stepText}
@@ -398,6 +490,14 @@ export function AnnotationPanel({ doc, grid, validation, editor }: AnnotationPan
           {selectedOwner ? `${selectedOwner.title}的${ROLE_TEXT[selectedOwner.role]}` : '未標註'}
         </p>
       ) : null}
+      {/* 006 FR-020：沒有進行中的步驟、選取格屬於其他題時，可直接前往那一題 */}
+      {selectedOwner && !editor.target && selectedOwner.key !== editor.currentKey ? (
+        <div>
+          <Button variant="secondary" onClick={() => editor.goTo(selectedOwner.key)}>
+            前往{selectedOwner.questionTitle}
+          </Button>
+        </div>
+      ) : null}
 
       <IssueList items={general} tone="issue" />
 
@@ -406,6 +506,8 @@ export function AnnotationPanel({ doc, grid, validation, editor }: AnnotationPan
       ) : (
         <ol className="flex flex-col gap-3">
           {doc.questions.map((q, qi) => {
+            // 006 FR-014：一次只顯示目前這一題
+            if (qi !== editor.currentIndex) return null;
             const title = titleOf(q, qi);
             const issues = validation.issues.filter((i) => i.questionKey === q.key);
             const warnings = validation.warnings.filter((i) => i.questionKey === q.key);

@@ -165,7 +165,7 @@ frontend/
 |------|------|------|------|
 | UI 風格系統 | `frontend/src/styles/theme.css` | AuthRoutes | `backend/src/routes/authRoutes.ts` |
 | LoginPage | `frontend/src/pages/LoginPage.tsx` | StudentRoutes | `backend/src/routes/studentRoutes.ts` |
-| TeacherDashboard | `frontend/src/pages/TeacherDashboard.tsx` | GroupRoutes | `backend/src/routes/groupRoutes.ts` |
+| StudentManagePage | `frontend/src/pages/StudentManagePage.tsx`（006 由 TeacherDashboard 改名） | GroupRoutes | `backend/src/routes/groupRoutes.ts` |
 | StudentCreatePanel | `frontend/src/pages/StudentCreatePanel.tsx` | RequireAuth | `backend/src/middleware/requireAuth.ts` |
 | GroupManagePanel | `frontend/src/pages/GroupManagePanel.tsx` | RequireRole | `backend/src/middleware/requireRole.ts` |
 | StudentHome | `frontend/src/pages/StudentHome.tsx` | Validate | `backend/src/middleware/validate.ts` |

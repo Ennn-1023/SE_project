@@ -13,7 +13,7 @@ import { useTeacherActivity, type TeacherSocketFactory } from '../activity/useTe
 import { Button } from '../components/Button';
 import { ConnectionBanner } from '../components/ConnectionBanner';
 import { ErrorMessage } from '../components/ErrorMessage';
-import { Layout } from '../components/Layout';
+import { TeacherLayout } from '../components/TeacherLayout';
 
 export const OFFLINE_TEXT = '連線中斷，正在重新連線，請稍後再操作';
 export const NO_RESULTS_TEXT = '尚無搶答活動結果可寫回或匯出';
@@ -45,13 +45,13 @@ export function ActivityControlPage({ socketFactory }: { socketFactory?: Teacher
 
   if (!view) {
     return (
-      <Layout title="搶答活動">
+      <TeacherLayout title="搶答活動">
         {loadError ? (
           <ErrorMessage message={loadError.message} hint={loadError.hint} />
         ) : (
           <p role="status">載入中…</p>
         )}
-      </Layout>
+      </TeacherLayout>
     );
   }
 
@@ -86,7 +86,7 @@ export function ActivityControlPage({ socketFactory }: { socketFactory?: Teacher
     : undefined;
 
   return (
-    <Layout title="搶答活動">
+    <TeacherLayout title="搶答活動">
       <div className="flex flex-col gap-4">
         <div
           className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-cream-300 bg-cream-100 px-3 py-2"
@@ -265,6 +265,6 @@ export function ActivityControlPage({ socketFactory }: { socketFactory?: Teacher
           </div>
         ) : null}
       </div>
-    </Layout>
+    </TeacherLayout>
   );
 }
