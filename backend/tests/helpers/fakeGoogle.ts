@@ -329,6 +329,13 @@ export class FakeGoogle implements GoogleOAuthClient, SheetsGateway {
       hiddenColumns: [...sheet.hiddenColumns]
         .filter((c) => c <= range.columnCount)
         .sort((a, b) => a - b),
+      // 與 Google 相同：回傳整個分頁的受保護範圍（不受讀取範圍限制）
+      protectedAreas: [...this.protectedCells]
+        .filter((k) => k.startsWith(`${spreadsheetId}|${sheetTitle}|`))
+        .map((k) => {
+          const p = parseCellRef(k.slice(k.lastIndexOf('|') + 1))!;
+          return { startRow: p.row, startCol: p.col, endRow: p.row, endCol: p.col, except: [] };
+        }),
     };
   }
 

@@ -90,6 +90,48 @@ describe('SheetsGateway：讀取', () => {
     expect(url.searchParams.get('fields')).toContain('merges');
   });
 
+  it('getGrid 只回傳目前使用者不能編輯的受保護範圍，含例外範圍與到邊界的範圍（005 T063）', async () => {
+    const f = vi.fn(async () =>
+      ok({
+        sheets: [
+          {
+            protectedRanges: [
+              // G5:G6（0 起算、結尾不含）
+              {
+                range: { startRowIndex: 4, endRowIndex: 6, startColumnIndex: 6, endColumnIndex: 7 },
+                requestingUserCanEdit: false,
+              },
+              // 整張分頁，但 B 欄例外
+              {
+                range: { sheetId: 0 },
+                unprotectedRanges: [{ startColumnIndex: 1, endColumnIndex: 2 }],
+              },
+              // 只顯示警告：可寫入，不列入
+              { range: { startRowIndex: 0, endRowIndex: 1 }, warningOnly: true },
+              // 目前使用者可編輯：不列入
+              { range: { startRowIndex: 1, endRowIndex: 2 }, requestingUserCanEdit: true },
+            ],
+            data: [{}],
+          },
+        ],
+      }),
+    );
+    const grid = await gateway(f).getGrid('tok', ID, 'A', { rowCount: 4, columnCount: 7 });
+    expect(grid.protectedAreas).toEqual([
+      { startRow: 5, startCol: 7, endRow: 6, endCol: 7, except: [] },
+      {
+        startRow: 1,
+        startCol: 1,
+        endRow: null,
+        endCol: null,
+        except: [{ startRow: 1, startCol: 2, endRow: null, endCol: 2 }],
+      },
+    ]);
+    expect(new URL(call(f)[0]).searchParams.get('fields')).toContain(
+      'protectedRanges(range,unprotectedRanges,warningOnly,requestingUserCanEdit)',
+    );
+  });
+
   it('searchMetadata 以本系統三個 key 篩選，轉為 MetadataEntry 並略過其他 key', async () => {
     const f = vi.fn(async () => ok(fixture('metadata-search.json')));
     const entries = await gateway(f).searchMetadata('tok', ID, 0);

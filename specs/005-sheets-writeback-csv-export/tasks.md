@@ -309,3 +309,9 @@ Task: "CsvEncoder in backend/src/services/csvEncoder.ts"
 - 欄位約束一律以 data-model.md 為準；任務中只引用，不重複抄寫
 - 每完成一個任務或邏輯群組即可 commit（使用者要求時）
 - 偏離 `diagrams/005-*.puml` 時，先改圖並重新產生 PNG，再改程式（憲章原則 VI）
+
+---
+
+## Phase 9: Convergence
+
+- [X] T063 在 `backend/src/services/writebackService.ts` 的受保護範圍錯誤（`SHEET_PROTECTED_RANGE`）訊息中指出是哪幾題的作答格（例如「第 3 題作答格位於受保護範圍」），可依本次 `updates` 的格子比對試算表的受保護範圍取得題號；無法判斷時維持目前的通用訊息，並在 `backend/tests/unit/writebackService.test.ts` 補測試 per spec Edge Cases: 受保護範圍 (partial)

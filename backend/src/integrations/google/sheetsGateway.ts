@@ -2,7 +2,13 @@
  * SheetsGateway（組件圖 003-component、research R2／R3）：以內建 fetch 呼叫 Google Sheets API v4。
  * 只回傳本系統需要的欄位；錯誤以 GoogleHttpError 拋出，由 SheetsService 轉為 AppError。
  */
-import { toCellRef, type GridSnapshot, type SheetTab } from '@buzzer/shared';
+import {
+  toCellRef,
+  type GridArea,
+  type GridSnapshot,
+  type ProtectedArea,
+  type SheetTab,
+} from '@buzzer/shared';
 import type {
   CellUpdate,
   MetadataEntry,
@@ -20,7 +26,8 @@ export const METADATA_KEYS: MetadataEntry['key'][] = ['qimport.set', 'qimport.ro
 export const quoteSheet = (title: string) => `'${title.replace(/'/g, "''")}'`;
 
 const GRID_FIELDS =
-  'sheets(merges,data(rowMetadata(hiddenByUser,hiddenByFilter),columnMetadata(hiddenByUser),' +
+  'sheets(merges,protectedRanges(range,unprotectedRanges,warningOnly,requestingUserCanEdit),' +
+  'data(rowMetadata(hiddenByUser,hiddenByFilter),columnMetadata(hiddenByUser),' +
   'rowData(values(formattedValue,effectiveValue(errorValue)))))';
 
 interface GridRange {
@@ -28,6 +35,33 @@ interface GridRange {
   endRowIndex?: number;
   startColumnIndex?: number;
   endColumnIndex?: number;
+}
+
+interface ApiProtectedRange {
+  range?: GridRange;
+  unprotectedRanges?: GridRange[];
+  warningOnly?: boolean;
+  requestingUserCanEdit?: boolean;
+}
+
+/** Google GridRange（0 起算、結尾不含；缺少表示到邊界）→ GridArea（1 起算、含頭尾） */
+function toArea(r: GridRange = {}): GridArea {
+  return {
+    startRow: (r.startRowIndex ?? 0) + 1,
+    startCol: (r.startColumnIndex ?? 0) + 1,
+    endRow: r.endRowIndex ?? null,
+    endCol: r.endColumnIndex ?? null,
+  };
+}
+
+/** 只保留目前使用者不能編輯、且不是「只顯示警告」的保護（005 T063） */
+export function toProtectedAreas(ranges: ApiProtectedRange[] = []): ProtectedArea[] {
+  return ranges
+    .filter((p) => !p.warningOnly && p.requestingUserCanEdit !== true)
+    .map((p) => ({
+      ...toArea(p.range),
+      except: (p.unprotectedRanges ?? []).map((u) => toArea(u)),
+    }));
 }
 
 interface ApiMetadata {
@@ -138,6 +172,7 @@ export class SheetsGateway implements SheetsGatewayPort {
     const body = (await googleFetch(url.toString(), this.auth(token), this.http)) as {
       sheets?: {
         merges?: GridRange[];
+        protectedRanges?: ApiProtectedRange[];
         data?: {
           rowMetadata?: { hiddenByUser?: boolean; hiddenByFilter?: boolean }[];
           columnMetadata?: { hiddenByUser?: boolean }[];
@@ -181,6 +216,7 @@ export class SheetsGateway implements SheetsGatewayPort {
       merges,
       hiddenRows,
       hiddenColumns,
+      protectedAreas: toProtectedAreas(sheet.protectedRanges),
     };
   }
 

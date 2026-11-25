@@ -4,13 +4,13 @@
  * 主要流程的端對端情境見 tests/integration/writeback.*.test.ts。
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { AnnotationDocument, GridSnapshot, MergeRange } from '@buzzer/shared';
+import type { AnnotationDocument, GridSnapshot, MergeRange, ProtectedArea } from '@buzzer/shared';
 import type { ExportEvent, ExportEventRepository } from '../../src/db/exportEventRepository';
 import type { WritebackTargetRepository } from '../../src/db/writebackTargetRepository';
 import { AnnotationCodec } from '../../src/domain/annotationCodec';
 import type { CellUpdate, SheetData } from '../../src/domain/questionPorts';
 import { createFakeClock, type FakeClock } from '../../src/lib/clock';
-import { AppError } from '../../src/lib/errors';
+import { AppError, appError } from '../../src/lib/errors';
 import { createLogger } from '../../src/lib/logger';
 import type {
   ActivityResultReader,
@@ -26,6 +26,7 @@ interface World {
   outcomes: QuestionOutcome[];
   cells: Map<string, string>;
   merges: MergeRange[];
+  protectedAreas?: ProtectedArea[];
   doc: AnnotationDocument;
   rowCount: number;
   columnCount: number;
@@ -37,6 +38,8 @@ let writes: CellUpdate[][];
 let events: ExportEvent[];
 let logs: string[];
 let service: WritebackService;
+/** 設定後 writeCells 會拋出此錯誤（模擬 Google 拒絕寫入） */
+let rejectWrite: Error | null = null;
 
 /** n 題、每題 parts 個小題：作答格在第 (i+1) 列、第 (p+2) 欄；每題由第 (i % 10 + 1) 組搶答成功 */
 function buildWorld(n: number, parts: number, teams = 1): World {
@@ -107,6 +110,7 @@ function sheetData(): SheetData {
     merges: world.merges,
     hiddenRows: [],
     hiddenColumns: [],
+    ...(world.protectedAreas ? { protectedAreas: world.protectedAreas } : {}),
   };
   return {
     spreadsheetId: 's'.repeat(30),
@@ -140,6 +144,7 @@ function makeService() {
   const sheets = {
     readSheet: async () => sheetData(),
     writeCells: async (_u: number, _s: string, _id: number, updates: CellUpdate[]) => {
+      if (rejectWrite) throw rejectWrite;
       writes.push(updates);
       for (const u of updates) world.cells.set(u.cell, u.value);
     },
@@ -152,6 +157,83 @@ function makeService() {
 
 beforeEach(() => {
   clock = createFakeClock(new Date('2026-11-24T02:00:00Z'));
+  rejectWrite = null;
+});
+
+describe('受保護範圍訊息指出題號（spec Edge Cases、T063）', () => {
+  const protectedError = () => appError('SHEET_PROTECTED_RANGE');
+
+  it('作答格落在受保護範圍 → 訊息列出該題題號，details.questions 為題號清單', async () => {
+    world = buildWorld(4, 2);
+    // 第 2 題（2）小題 C2、第 4 題整列受保護
+    world.protectedAreas = [
+      { startRow: 2, startCol: 3, endRow: 2, endCol: 3, except: [] },
+      { startRow: 4, startCol: 1, endRow: 4, endCol: null, except: [] },
+    ];
+    makeService();
+    const v = await service.preview(1);
+    rejectWrite = protectedError();
+    const err = await service
+      .confirm(1, v.previewId, undefined, undefined)
+      .catch((e: unknown) => e);
+    expect(err).toMatchObject({
+      code: 'SHEET_PROTECTED_RANGE',
+      message: '第 2、4 題作答格位於受保護範圍，無法寫入',
+      details: { questions: ['2', '4'] },
+    });
+    expect((err as AppError).hint).toContain('解除保護');
+    expect(writes).toHaveLength(0);
+  });
+
+  it('整張分頁受保護、但作答格在例外範圍內 → 不列出該題', async () => {
+    world = buildWorld(3, 1);
+    world.protectedAreas = [
+      {
+        startRow: 1,
+        startCol: 1,
+        endRow: null,
+        endCol: null,
+        except: [{ startRow: 1, startCol: 2, endRow: 2, endCol: 2 }],
+      },
+    ];
+    makeService();
+    const v = await service.preview(1);
+    rejectWrite = protectedError();
+    await expect(service.confirm(1, v.previewId, undefined, undefined)).rejects.toMatchObject({
+      message: '第 3 題作答格位於受保護範圍，無法寫入',
+    });
+  });
+
+  it('無法判斷是哪一格（沒有受保護範圍資訊或都不相交）→ 維持通用訊息', async () => {
+    world = buildWorld(2, 1);
+    makeService();
+    const v = await service.preview(1);
+    rejectWrite = protectedError();
+    const err = await service
+      .confirm(1, v.previewId, undefined, undefined)
+      .catch((e: unknown) => e);
+    expect(err).toMatchObject({
+      code: 'SHEET_PROTECTED_RANGE',
+      message: '作答格位於受保護範圍，無法寫入',
+    });
+
+    world.protectedAreas = [{ startRow: 50, startCol: 1, endRow: 60, endCol: 5, except: [] }];
+    await expect(service.confirm(1, v.previewId, undefined, undefined)).rejects.toMatchObject({
+      message: '作答格位於受保護範圍，無法寫入',
+    });
+  });
+
+  it('其他寫入錯誤不受影響（無編輯權限維持原訊息）', async () => {
+    world = buildWorld(1, 1);
+    world.protectedAreas = [{ startRow: 1, startCol: 1, endRow: null, endCol: null, except: [] }];
+    makeService();
+    const v = await service.preview(1);
+    rejectWrite = appError('SHEET_NO_EDIT_PERMISSION');
+    await expect(service.confirm(1, v.previewId, undefined, undefined)).rejects.toMatchObject({
+      code: 'SHEET_NO_EDIT_PERMISSION',
+      message: '你連結的 Google 帳號沒有這份試算表的編輯權限',
+    });
+  });
 });
 
 describe('preview／confirm 基本行為', () => {

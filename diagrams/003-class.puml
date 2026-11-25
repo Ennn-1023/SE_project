@@ -23,6 +23,15 @@ package "共用型別（shared/annotation.ts）" {
     +merges: MergeRange[]
     +hiddenRows: int[]
     +hiddenColumns: int[]
+    +protectedAreas: ProtectedArea[]? <<005：目前使用者不能編輯的受保護範圍>>
+  }
+
+  class ProtectedArea {
+    +startRow: int
+    +startCol: int
+    +endRow: int?
+    +endCol: int?
+    +except: GridArea[]
   }
 
   class AnnotationDocument {
@@ -242,6 +251,7 @@ AnnotatedQuestion --> QuestionKind
 ValidationResult "1" *-- "*" Issue
 ImportDraft --> DraftStatus
 ImportDraft "1" *-- "1" GridSnapshot
+GridSnapshot "1" *-- "0..*" ProtectedArea
 ImportDraft "1" *-- "1" AnnotationDocument
 QuestionSet "1" *-- "1..200" ImportedQuestion
 ImportedQuestion "1" *-- "1..10" AnswerSlot

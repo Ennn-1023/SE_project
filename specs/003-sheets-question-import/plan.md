@@ -175,7 +175,7 @@ frontend/tests/                        # QuestionManagePage、SheetGrid、Annota
 
 | 類別圖元素 | 程式位置 |
 |-----------|----------|
-| `QuestionKind`、`SheetLink`、`GridSnapshot`、`AnnotationDocument`、`AnnotatedQuestion`、`AnnotatedPart`、`Issue`、`ValidationResult`、`QuestionSetView` | `shared/src/annotation.ts` |
+| `QuestionKind`、`SheetLink`、`GridSnapshot`、`ProtectedArea`（005 T063）、`AnnotationDocument`、`AnnotatedQuestion`、`AnnotatedPart`、`Issue`、`ValidationResult`、`QuestionSetView` | `shared/src/annotation.ts` |
 | `DraftStatus`、`GoogleConnection`、`OAuthState`、`ImportDraft`、`QuestionSet`、`ImportedQuestion`、`AnswerSlot`、`QuestionEvent` | `backend/src/domain/questionTypes.ts`（純型別）；資料表見 [data-model.md](data-model.md) |
 | `GoogleOAuthClient`、`SheetsGateway`、`GoogleConnectionRepository`、`OAuthStateRepository`、`ImportDraftRepository`、`QuestionSetRepository`、`QuestionEventRepository`（interface） | 介面定義於 `backend/src/domain/questionPorts.ts`；實作類別（同名）見組件對照表 |
 | `GoogleAuthService`、`SheetsService`、`QuestionImportService`、`QuestionSetService`、`AnnotationCodec`、`TokenCipher` | 見組件對照表；公開方法名稱與類別圖相同 |

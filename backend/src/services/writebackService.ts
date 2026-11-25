@@ -11,6 +11,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import {
   WritebackRules,
+  isProtectedCell,
   normalizeToMergeTopLeft,
   parseCellRef,
   type CellRef,
@@ -113,6 +114,15 @@ export interface WritebackServiceDeps {
   events: ExportEventRepository;
   clock: Clock;
   logger: Logger;
+}
+
+/** 確認時實際要寫入的內容；questionNumbers[i] 為 updates[i] 所屬題號 */
+interface WritePlan {
+  updates: CellUpdate[];
+  questionNumbers: string[];
+  writtenQuestions: number;
+  overwritten: number;
+  skipped: SkippedReasonCount[];
 }
 
 const SKIP_REASON_ORDER: SkippedCellReason[] = [
@@ -241,7 +251,7 @@ export class WritebackService {
     this.writing = true;
     // ---- 以下才開始非同步呼叫 ----
     try {
-      await this.recheck(preview);
+      const sheet = await this.recheck(preview);
       const plan = this.plan(preview, modeCheck.value, selected);
       try {
         await this.deps.sheets.writeCells(
@@ -251,7 +261,7 @@ export class WritebackService {
           plan.updates,
         );
       } catch (err) {
-        throw this.rephrase(err, preview.target);
+        throw this.rephrase(err, preview.target, this.protectedQuestions(plan, sheet));
       }
       const outcome: WritebackOutcome = {
         writtenCells: plan.updates.length,
@@ -295,8 +305,38 @@ export class WritebackService {
     }
   }
 
-  private rephrase(err: unknown, target: WritebackTarget): unknown {
+  /**
+   * 本次要寫入、且落在受保護範圍內的格子所屬題號（依題目順序、不重複）。
+   * Google 拒絕寫入時不會指出是哪一格，因此以讀取時取得的受保護範圍比對；無資訊時回傳空陣列。
+   */
+  private protectedQuestions(plan: WritePlan, sheet: SheetData): string[] {
+    const areas = sheet.grid.protectedAreas ?? [];
+    if (areas.length === 0) return [];
+    const numbers: string[] = [];
+    plan.updates.forEach((u, i) => {
+      const p = parseCellRef(u.cell);
+      const n = plan.questionNumbers[i]!;
+      if (p && isProtectedCell(areas, p.row, p.col) && !numbers.includes(n)) numbers.push(n);
+    });
+    return numbers;
+  }
+
+  private rephrase(
+    err: unknown,
+    target: WritebackTarget,
+    protectedQuestions: string[] = [],
+  ): unknown {
     if (!(err instanceof AppError)) return err;
+    if (err.code === 'SHEET_PROTECTED_RANGE' && protectedQuestions.length > 0) {
+      return new AppError(
+        err.code,
+        `第 ${protectedQuestions.join('、')} 題作答格位於受保護範圍，無法寫入`,
+        {
+          hint: '請擁有者解除保護或將你加入可編輯名單；試算表未被修改',
+          details: { questions: protectedQuestions },
+        },
+      );
+    }
     const text: Partial<Record<ErrorCode, { message: string; hint: string }>> = {
       GOOGLE_NOT_CONNECTED: {
         message: '請先連結 Google 帳號',
@@ -431,8 +471,11 @@ export class WritebackService {
     return current === item.answer.trim() ? 'SAME_CONTENT' : 'OVERWRITE';
   }
 
-  /** 確認前重新讀取並比對位置、內容與結果指紋；任何不同 → WRITEBACK_STALE（FR-012） */
-  private async recheck(preview: WritebackPreview): Promise<void> {
+  /**
+   * 確認前重新讀取並比對位置、內容與結果指紋；任何不同 → WRITEBACK_STALE（FR-012）。
+   * 回傳重新讀取的分頁，供寫入被拒時比對受保護範圍。
+   */
+  private async recheck(preview: WritebackPreview): Promise<SheetData> {
     const { reader, targets } = this.deps;
     const sheet = await this.readTarget(preview.teacherId, preview.target);
     const outcomes = reader.validResults(preview.activityId);
@@ -470,11 +513,17 @@ export class WritebackService {
         details: { questions: list },
       });
     }
+    return sheet;
   }
 
   /** 依覆蓋選項與勾選的後備位置決定要寫的格子（data-model.md §3.3） */
-  private plan(preview: WritebackPreview, mode: OverwriteMode | undefined, selected: Set<string>) {
+  private plan(
+    preview: WritebackPreview,
+    mode: OverwriteMode | undefined,
+    selected: Set<string>,
+  ): WritePlan {
     const updates: CellUpdate[] = [];
+    const questionNumbers: string[] = [];
     const written = new Set<string>();
     const skipped = new Map<SkippedCellReason, number>();
     let overwritten = 0;
@@ -482,6 +531,7 @@ export class WritebackService {
     const write = (item: WritebackItem, cell: CellRef, overwrite: boolean) => {
       // 只寫答案原文：不 trim、不加組名（Clarifications Q5）
       updates.push({ cell, value: item.answer });
+      questionNumbers.push(item.questionNumber);
       written.add(item.questionKey);
       if (overwrite) overwritten += 1;
     };
@@ -507,6 +557,7 @@ export class WritebackService {
     }
     return {
       updates,
+      questionNumbers,
       writtenQuestions: written.size,
       overwritten,
       skipped: SKIP_REASON_ORDER.filter((r) => skipped.has(r)).map((reason) => ({

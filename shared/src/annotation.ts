@@ -48,6 +48,43 @@ export interface GridSnapshot {
   hiddenRows: number[];
   /** 1 起算 */
   hiddenColumns: number[];
+  /**
+   * 目前使用者不能編輯的受保護範圍（005 T063；只用於說明寫入被拒的是哪幾格）。
+   * 不含「只顯示警告」的保護；未讀取時省略。
+   */
+  protectedAreas?: ProtectedArea[];
+}
+
+/** 格子範圍：1 起算、含頭尾；end 為 null 表示延伸到分頁邊界 */
+export interface GridArea {
+  startRow: number;
+  startCol: number;
+  endRow: number | null;
+  endCol: number | null;
+}
+
+/** 受保護範圍（欄位意義同 GridArea）與其中允許編輯的例外範圍 */
+export interface ProtectedArea {
+  startRow: number;
+  startCol: number;
+  endRow: number | null;
+  endCol: number | null;
+  except: GridArea[];
+}
+
+const inArea = (a: GridArea, row: number, col: number) =>
+  row >= a.startRow &&
+  col >= a.startCol &&
+  (a.endRow === null || row <= a.endRow) &&
+  (a.endCol === null || col <= a.endCol);
+
+/** 格子是否落在任一受保護範圍內（且不在其例外範圍） */
+export function isProtectedCell(
+  areas: readonly ProtectedArea[],
+  row: number,
+  col: number,
+): boolean {
+  return areas.some((a) => inArea(a, row, col) && !a.except.some((e) => inArea(e, row, col)));
 }
 
 export interface AnnotatedPart {

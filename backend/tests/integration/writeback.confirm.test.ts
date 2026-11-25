@@ -246,6 +246,9 @@ describe('Google 錯誤、冪等與重新開放（US4）', () => {
     const res = await s.wb.confirm({ previewId: v.previewId });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('SHEET_PROTECTED_RANGE');
+    // G9 是第 3 題的作答格（spec Edge Cases：訊息指出題號）
+    expect(res.body.error.message).toBe('第 3 題作答格位於受保護範圍，無法寫入');
+    expect(res.body.error.details).toEqual({ questions: ['3'] });
     expect(res.body.error.hint).toContain('解除保護');
     expect(s.google.contentSnapshot(s.spreadsheetId, s.sheetTitle)).toBe(before);
   });
